@@ -1,6 +1,8 @@
-# Fog Ledger Skill
+# Fog glossary
 
-This context defines the language for preserving unresolved work across Wayfinder maps and agent sessions.
+The language for preserving unresolved work across Wayfinder maps and agent sessions. Each entry names a distinction the ledger depends on and lists the looser words it displaces — those are what turn an index of unowned work back into a backlog.
+
+`SKILL.md` defines these terms where each does its work; this file is the reference for when a distinction is contested.
 
 ## Language
 

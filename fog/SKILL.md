@@ -7,6 +7,8 @@ description: Capture, route, and maintain unresolved future work across sessions
 
 Preserve unresolved work without turning it prematurely into a backlog. Treat an active Wayfinder map as the store for its fog and the repository fog ledger as the live cross-map index.
 
+*Fog*, *patch*, *carried*, *deferred effort* and *trigger* are precise terms, defined below where each does its work. Read [references/glossary.md](references/glossary.md) when a distinction is contested — it also records the looser words each term displaces, which is what keeps a ledger from decaying into a backlog.
+
 ## Choose the mode
 
 - With no argument, or a request to sweep or revisit fog, run **Sweep**.

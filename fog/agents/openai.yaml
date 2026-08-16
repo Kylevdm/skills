@@ -1,6 +1,0 @@
-interface:
-  display_name: "Fog"
-  short_description: "Capture and maintain cross-map fog"
-  default_prompt: "Use $fog to sweep the repository fog ledger."
-policy:
-  allow_implicit_invocation: true
