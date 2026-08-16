@@ -45,9 +45,11 @@ Closed maps whose **Not yet specified** patches are all marked. Record maps with
 
 ## Deferred efforts
 
-Wanted work outside every current map's destination and owned by nobody. An idea that never came from a map belongs here too.
+Wanted work outside every current map's destination and owned by nobody. An idea that never came from a map belongs here too. Group into subject subsections once there are enough entries to scan; other entries then refer to them by name.
 
 <!--
+### Subject
+
 - **What it is.** Where it already touches the build, with evidence, when applicable.
-  Trigger: none yet.
+  Which maps rule it out of scope, and what raised it. Trigger: none yet.
 -->
