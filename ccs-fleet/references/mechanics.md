@@ -96,7 +96,7 @@ with `CCS_FLEET_EXCLUDES_FILE=<path>` for project-specific patterns.
 |---|---|---|
 | `Error: E104` | Profile name not in `~/.ccs/config.yaml`, or `:continue` syntax | Check `profiles:` in the config; use `--resume` |
 | HTTP 401 | Token in `~/.ccs/<profile>.settings.json` rejected | Re-issue the key at the provider |
-| HTTP 429 | Rate limited — common on nvidia's free tier under fan-out | Stagger launches, or move some tasks to deepseek |
+| HTTP 429 | Rate limited under fan-out | Stagger launches |
 | exit 124 | Hit `CCS_FLEET_TIMEOUT` | Split the task, or raise the limit |
 | `done` but `0 file(s)` | Agent decided nothing needed doing, or misread the brief | Read `run.log`; usually the brief was ambiguous |
 | agy `status: "ERROR"` | See the `error` field — bad `--model`, quota/billing limit, or a genuine tool failure | Fix the cause named in `error`; route to `deepseek` if it's a limit |
@@ -185,3 +185,15 @@ model-that-silently-didn't-apply — `status`, `error`, and `usage` can all be
 trusted directly. `agy_conversation_id()` in the script deliberately scans
 `run.log` from the end and takes the last JSON-shaped line, in case anything
 else ever ends up ahead of it in the log.
+
+### `gpt-oss-120b-medium` (`agy-oss`) can report success without editing
+
+Verified 2026-08-18: on a one-line, loosely worded brief, `agy-oss` returned
+`status: "SUCCESS"` with prose describing the edit it claimed to make, but
+the worktree was untouched (`0 file(s)` in `status`, empty `diff`) — not the
+`--add-dir` scratch-folder trap above, just the model narrating a tool call
+it never issued. Re-running the identical task with a brief that explicitly
+says to use the file-editing tool and confirm the save succeeded end to end.
+Treat a `done` `agy-oss` run with `0 file(s)` as reason to read `response` in
+`log <slug>` before relaunching — the model may just need a more explicit
+instruction to act rather than describe, not a different profile.

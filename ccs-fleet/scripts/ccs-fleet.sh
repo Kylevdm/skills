@@ -41,9 +41,9 @@ alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
 # to branch on this.
 tool_for_profile() {
   case "$1" in
-    nvidia|deepseek)                          echo ccs ;;
-    agy-flash|agy-pro|agy-sonnet|agy-opus)    echo agy ;;
-    *) die "unknown profile '$1' (nvidia, deepseek, agy-flash, agy-pro, agy-sonnet, agy-opus)" ;;
+    deepseek)                                           echo ccs ;;
+    agy-flash|agy-pro|agy-oss|agy-sonnet|agy-opus)      echo agy ;;
+    *) die "unknown profile '$1' (deepseek, agy-flash, agy-pro, agy-oss, agy-sonnet, agy-opus)" ;;
   esac
 }
 
@@ -54,6 +54,7 @@ agy_default_model() {
   case "$1" in
     agy-flash)  echo gemini-3.7-flash-high ;;
     agy-pro)    echo gemini-3.1-pro-high ;;
+    agy-oss)    echo gpt-oss-120b-medium ;;
     agy-sonnet) echo claude-sonnet-4-6 ;;
     agy-opus)   echo claude-opus-4-6-thinking ;;
   esac
@@ -401,9 +402,9 @@ ccs-fleet.sh — isolated CCS/agy coding agents, one git worktree each
 
   launch --task <slug> --profile <profile> [--model <m>]
          (--prompt <text> | --prompt-file <path>) [--base <ref>] [--repo <path>]
-         profiles: nvidia, deepseek           (CCS, local)
-                   agy-flash, agy-pro,        (Antigravity/Gemini + Claude
-                   agy-sonnet, agy-opus        via Google, remote & billed)
+         profiles: deepseek                    (CCS, local)
+                   agy-flash, agy-pro, agy-oss,  (Antigravity/Gemini + GPT-OSS +
+                   agy-sonnet, agy-opus           Claude via Google, remote & billed)
   status                       one line per agent: state, tool, profile, files changed
   log <slug>                   raw CCS/agy output for that agent
   diff <slug>                  everything the agent changed, vs. the commit it started from

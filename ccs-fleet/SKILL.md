@@ -3,14 +3,18 @@ name: ccs-fleet
 description: >-
   Deploy coding agents through the CCS CLI (`ccs <profile> -p`) and the
   Antigravity CLI (`agy <profile> -p`), each isolated in its own git worktree
-  and branch. Backends: `nvidia`/`deepseek` (CCS, local, free-or-cheap) and
-  `agy-flash`/`agy-pro`/`agy-sonnet`/`agy-opus` (Antigravity, remote and
-  billed — Gemini 3.7 Flash, Gemini 3.1 Pro, Claude Sonnet 4.6, Claude Opus
-  4.6). Use this skill whenever the user wants work handed to another model
+  and branch. Backends: `deepseek` (CCS, local, cheap) and
+  `agy-flash`/`agy-pro`/`agy-oss`/`agy-sonnet`/`agy-opus` (Antigravity, remote
+  and billed — Gemini 3.7 Flash, Gemini 3.1 Pro, GPT-OSS 120B, Claude Sonnet
+  4.6, Claude Opus 4.6). `agy-sonnet`/`agy-opus` draw down a separate,
+  tighter Antigravity usage limit from the rest of the fleet, so `agy-oss`
+  (GPT-OSS 120B) is the default for hard-reasoning tasks that don't
+  specifically need Claude. Use this skill whenever the user wants work
+  handed to another model
   rather than done here — "use ccs", "use agy"/"antigravity", "deploy/spin up
   agents", "delegate this", "farm this out", "fan these out", "run these in
-  parallel", "get deepseek to do it", "send this to nemotron/nvidia/flash/
-  gemini/sonnet/opus-on-agy" — and whenever they list several independent
+  parallel", "get deepseek to do it", "send this to flash/
+  gemini/gpt-oss/sonnet/opus-on-agy" — and whenever they list several independent
   chores at once, since that is the case parallel agents exist for. Also use
   it to check on, resume, review, land, or clean up agents already launched.
   Prefer this over hand-rolled `ccs`/`agy` calls: both write files unattended
@@ -22,9 +26,12 @@ description: >-
 Delegate work to other models by launching real coding agents — each one a
 headless session pointed at a non-Anthropic backend, running in a throwaway
 git worktree so its edits stay quarantined until reviewed. Two backends are
-wired up: CCS (`nvidia`, `deepseek`, local) and Antigravity (`agy-*`, Google's
-CLI, remote and billed — it's how Gemini and, at a price, Sonnet/Opus get
-into the fleet).
+wired up: CCS (`deepseek`, local) and Antigravity (`agy-*`, Google's
+CLI, remote and billed — it's how Gemini, GPT-OSS 120B, and, at a price,
+Sonnet/Opus get into the fleet). Antigravity meters `agy-sonnet`/`agy-opus`
+against a separate, tighter usage limit than its other models, so `agy-oss`
+is the go-to for reasoning-heavy work that doesn't specifically need Claude
+— it keeps the Sonnet/Opus quota free for the tasks that actually do.
 
 Everything runs through the bundled script:
 
@@ -75,28 +82,31 @@ the job.** Pick by task shape, and say in one clause why:
 |---|---|---|
 | Small, well-specified mechanical edits; fast turnaround wanted | `--profile agy-flash` | Gemini 3.7 Flash via Antigravity — quick and cheap, ample when the brief already contains the answer's shape. |
 | Multi-file changes, moderate reasoning, still routine | `--profile agy-pro` | Gemini 3.1 Pro — a step up from Flash for tasks needing more context-juggling without paying Claude-on-agy prices. |
-| Task specifically calls for Claude's judgment, and it's worth paying for | `--profile agy-sonnet` | Claude Sonnet 4.6 via Antigravity — expensive relative to the others, justified when the task shape genuinely wants Claude's style of reasoning over Gemini's. |
-| Hardest reasoning, worth the highest spend | `--profile agy-opus` | Claude Opus 4.6 via Antigravity — reserve for tasks that would otherwise stay here for lack of a cheaper agent that can do them. |
-| Bulk, repetitive, low-stakes; wrong answers cheap to throw away | `--profile nvidia` | Nemotron 3 Ultra on OpenRouter's free tier — genuinely free, and the slow one, since free requests queue. |
-| Antigravity is rate-limited, or task needs a huge context window | `--profile deepseek` (add `--model deepseek-v4-flash` for small mechanical edits) | Defaults to `deepseek-v4-pro[1m]` — the 1M window handles large-context tasks Antigravity's models aren't suited for either. |
+| Harder reasoning — refactors, tricky logic, ambiguous specs — that doesn't specifically need Claude's style | `--profile agy-oss` | GPT-OSS 120B via Antigravity — the default reach for anything Flash/Pro would plausibly get wrong. Sits outside the Sonnet/Opus quota, so lean on it before paying that limit down. |
+| Task specifically calls for Claude's judgment, and it's worth spending the separate quota on | `--profile agy-sonnet` | Claude Sonnet 4.6 via Antigravity — draws down a tighter, separate usage limit from the rest of the fleet. Reach for `agy-oss` first; use this only when the task shape genuinely wants Claude's reasoning over GPT-OSS's or Gemini's. |
+| Hardest reasoning, worth spending the Claude-on-agy quota | `--profile agy-opus` | Claude Opus 4.6 via Antigravity — same separate quota as `agy-sonnet`, spent only on tasks that would otherwise stay here for lack of a cheaper agent that can do them. |
+| Antigravity is rate-limited, task needs a huge context window, or the work is bulk/low-stakes and cheap answers are fine | `--profile deepseek` (add `--model deepseek-v4-flash` for small mechanical edits) | Defaults to `deepseek-v4-pro[1m]` — the 1M window handles large-context tasks Antigravity's models aren't suited for either, and `deepseek-v4-flash` is cheap enough for bulk, throwaway work. |
 
-Antigravity is billed per token and Sonnet/Opus on it cost noticeably more
-than the Gemini tiers — worth it when the task shape specifically calls for
-Claude's reasoning, wasteful for something Flash would nail. Do not reach for
-`agy-sonnet`/`agy-opus` by default; use them when the task is hard enough that
-a cheaper agent would plausibly get it wrong, or the user says to.
+Antigravity meters `agy-sonnet`/`agy-opus` against their own separate,
+tighter usage limit — distinct from the quota that `agy-flash`/`agy-pro`/
+`agy-oss` share — so treat that limit as scarce even when the general
+Antigravity quota has headroom. Reach for `agy-oss` first for anything that
+needs reasoning beyond Flash/Pro; only step up to `agy-sonnet`/`agy-opus`
+when the task genuinely wants Claude's style of reasoning specifically, or
+the user says to.
 
 Both backends fail expensively under rate limits — an agent can run for
-minutes before dying having changed nothing. nvidia's free tier has a daily
-cap (`429 · Rate limit exceeded: free-models-per-day`); Antigravity can hit
-its own quota or billing limits (check `log <slug>` for a `429` or a quota/
-billing message in the JSON `error` field). Either way, re-route rather than
-retry blind: nvidia → deepseek, and any `agy-*` profile → `deepseek` (its 1M
-context covers most of what the Antigravity tier would have handled). If a
+minutes before dying having changed nothing. Antigravity can hit its own
+quota or billing limits (check `log <slug>` for a `429` or a quota/billing
+message in the JSON `error` field). Re-route rather than retry blind: any
+`agy-*` profile → `deepseek` (its 1M context covers most of what the
+Antigravity tier would have handled). If the failure is specifically
+`agy-sonnet`/`agy-opus` hitting their own quota while the rest of Antigravity
+is fine, try `agy-oss` before falling all the way back to deepseek. If an
 `agy-*` run comes back `failed(1)`, read its `log` for the reason before
 assuming the brief was at fault — it may be a quota, not a mistake.
 
-Honour an explicit request ("use nvidia for all of these", "keep this off
+Honour an explicit request ("use deepseek for all of these", "keep this off
 agy") over this table. When fanning out several tasks, mixing profiles is
 good practice: it parallelizes across backends instead of queueing behind one
 rate limit, and keeps a quota hit on one backend from stalling the whole
@@ -151,9 +161,9 @@ distinct slug.
 ```bash
 F=~/.claude/skills/ccs-fleet/scripts/ccs-fleet.sh
 
-$F launch --task parser-tests  --profile agy-flash  --prompt-file /tmp/a.md
-$F launch --task doc-typos     --profile agy-flash  --prompt-file /tmp/b.md
-$F launch --task hard-refactor --profile agy-sonnet --prompt-file /tmp/c.md
+$F launch --task parser-tests  --profile agy-flash --prompt-file /tmp/a.md
+$F launch --task doc-typos     --profile agy-flash --prompt-file /tmp/b.md
+$F launch --task hard-refactor --profile agy-oss    --prompt-file /tmp/c.md
 
 $F status          # TASK / STATE / TOOL / PROFILE / MODEL / files changed
 ```
@@ -219,7 +229,7 @@ Clean up landed and abandoned agents once done — stale worktrees accumulate an
 CCS's and agy's `log <slug>` output look nothing alike, and each has its own
 trap.
 
-For **CCS** profiles (`nvidia`, `deepseek`), two things in its summary table
+For **CCS** profiles (`deepseek`), two things in its summary table
 are actively misleading, so do not pass them on to the user:
 
 - **`Cost`** is fabricated for these profiles — it applies Anthropic's price
@@ -238,7 +248,12 @@ This is more trustworthy than CCS's table: `status` is `"SUCCESS"` or
 `"ERROR"` and lines up with the process exit code, `usage` is real token
 counts, and there's no fabricated cost figure to filter out. If `status` is
 `"ERROR"`, the `error` field states the reason directly (bad model name,
-quota/billing limit, etc.) — read it before re-routing or relaunching.
+quota/billing limit, etc.) — read it before re-routing or relaunching. On
+`agy-oss` specifically, a `done` run can also come back `"SUCCESS"` with
+`0 file(s)` changed — the model narrated an edit it never made. Read
+`response` in the log before relaunching; usually the brief needs to say
+explicitly to use the file-editing tool and confirm the save, not switch
+profiles.
 
 For error codes, session mechanics, and the state layout, see
 `references/mechanics.md`.

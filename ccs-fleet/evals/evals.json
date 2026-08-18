@@ -21,6 +21,13 @@
       "prompt": "spin up agents for these two: rename the local variable `cfg` to `config` in src/config.py, and add a docstring to parse_config(). go",
       "expected_output": "Recognises both tasks touch src/config.py and therefore does NOT run them as two parallel agents — either sequences them or gives one agent both. Both changes end up applied without a merge conflict.",
       "files": []
+    },
+    {
+      "id": 4,
+      "name": "hard-refactor-avoids-claude-quota",
+      "prompt": "this one's gonna need real reasoning: refactor parse_config() in src/config.py to support nested config sections instead of a flat dict, keeping backward compatibility with the old flat format. don't want to burn our claude quota on agy if we don't have to though.",
+      "expected_output": "Routes to --profile agy-oss (GPT-OSS 120B) rather than agy-sonnet/agy-opus, since the task is hard-reasoning but doesn't specifically call for Claude's style and the user flagged the separate Sonnet/Opus quota as something to conserve. Explains the profile choice in one clause tying it to the quota concern.",
+      "files": []
     }
   ]
 }
