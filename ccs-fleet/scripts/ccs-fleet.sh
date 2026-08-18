@@ -35,6 +35,30 @@ except Exception:
 
 alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
 
+# Which backend a profile runs on. ccs and agy are different CLIs with
+# different invocation shapes (session handling, workspace trust, output
+# format), so every code path that builds an argv or resumes a session has
+# to branch on this.
+tool_for_profile() {
+  case "$1" in
+    nvidia|deepseek)                          echo ccs ;;
+    agy-flash|agy-pro|agy-sonnet|agy-opus)    echo agy ;;
+    *) die "unknown profile '$1' (nvidia, deepseek, agy-flash, agy-pro, agy-sonnet, agy-opus)" ;;
+  esac
+}
+
+# agy takes a full model id rather than defaulting one per profile the way
+# ccs profiles do, so each agy profile needs an explicit default. --model
+# still overrides these, same as on the ccs side.
+agy_default_model() {
+  case "$1" in
+    agy-flash)  echo gemini-3.7-flash-high ;;
+    agy-pro)    echo gemini-3.1-pro-high ;;
+    agy-sonnet) echo claude-sonnet-4-6 ;;
+    agy-opus)   echo claude-opus-4-6-thinking ;;
+  esac
+}
+
 state_of() {
   # state_of <dir> -> running | done | failed(N) | timeout | died
   # The runner writes its own pid on start and its exit code on finish, so
@@ -76,6 +100,9 @@ cmd_launch() {
   [ -n "$profile" ] || die "launch: --profile <name> is required"
   case "$slug" in *[!a-zA-Z0-9._-]*) die "launch: --task must be [a-zA-Z0-9._-] only";; esac
 
+  local tool; tool=$(tool_for_profile "$profile") || exit 1
+  [ "$tool" = agy ] && model=${model:-$(agy_default_model "$profile")}
+
   if [ -n "$prompt_file" ]; then
     [ -f "$prompt_file" ] || die "launch: no such prompt file: $prompt_file"
     prompt=$(cat "$prompt_file")
@@ -97,33 +124,47 @@ cmd_launch() {
   git -C "$REPO" worktree add -q -b "$branch" "$wt" "$base_sha" \
     || die "launch: git worktree add failed"
 
-  sid=$(cat /proc/sys/kernel/random/uuid)
+  # ccs takes a session id up front; agy hands one back in its JSON response
+  # once the run finishes (captured as conversation_id below), so sid starts
+  # empty on the agy path and cmd_finish fills it in.
+  sid=""
+  [ "$tool" = ccs ] && sid=$(cat /proc/sys/kernel/random/uuid)
   printf '%s' "$prompt" > "$dir/brief.md"
 
   python3 -c 'import json,sys
 json.dump(dict(zip(sys.argv[2::2], sys.argv[3::2])), open(sys.argv[1],"w"), indent=2)' \
     "$dir/meta.json" \
-    slug "$slug" profile "$profile" model "$model" session_id "$sid" \
+    slug "$slug" profile "$profile" tool "$tool" model "$model" session_id "$sid" \
     repo "$REPO" worktree "$wt" branch "$branch" base "$base" base_sha "$base_sha" \
     started "$(date -Is)"
 
-  # Build the ccs argv. --model is a claude passthrough arg: it really does
-  # change the model, even though CCS's summary table keeps printing the
-  # profile default. --session-id is what makes parallel agents resumable;
-  # ~/.ccs/delegation-sessions.json only remembers <profile>:latest and would
-  # otherwise be clobbered by whichever sibling agent finished last.
-  local -a argv=(ccs "$profile")
-  [ -n "$model" ] && argv+=(--model "$model")
-  argv+=(--session-id "$sid" -p "$prompt")
+  local -a argv=()
+  if [ "$tool" = ccs ]; then
+    # --model is a claude passthrough arg: it really does change the model,
+    # even though CCS's summary table keeps printing the profile default.
+    # --session-id is what makes parallel agents resumable; ~/.ccs/
+    # delegation-sessions.json only remembers <profile>:latest and would
+    # otherwise be clobbered by whichever sibling agent finished last.
+    argv=(ccs "$profile")
+    [ -n "$model" ] && argv+=(--model "$model")
+    argv+=(--session-id "$sid" -p "$prompt")
+  else
+    # agy only trusts workspaces listed in its own settings.json; anywhere
+    # else (every worktree, by construction) it silently redirects writes to
+    # its scratch directory instead of erroring. --add-dir is what grants
+    # trust for this run, so it is not optional the way it would be for ccs.
+    argv=(agy --model "$model" --dangerously-skip-permissions \
+      --add-dir "$wt" --output-format json -p "$prompt")
+  fi
 
   # One detached subshell owns the run and records its own exit status. Running
   # the agent and the bookkeeping in the same shell is what makes the exit code
   # reliable; a separate `wait` cannot reap a process it does not own.
-  setsid bash -c 'echo $$ >"$3/pid"; cd "$1" && timeout "$2" "${@:5}" >"$3/run.log" 2>&1; rc=$?; "$4" _autocommit "$3" >>"$3/run.log" 2>&1; echo $rc >"$3/exit_code"' \
+  setsid bash -c 'echo $$ >"$3/pid"; cd "$1" && timeout "$2" "${@:5}" >"$3/run.log" 2>&1; rc=$?; "$4" _finish "$3" >>"$3/run.log" 2>&1; echo $rc >"$3/exit_code"' \
     _ "$wt" "$DEFAULT_TIMEOUT" "$dir" "$SELF" "${argv[@]}" </dev/null >/dev/null 2>&1 &
   disown %% 2>/dev/null
 
-  printf 'launched %-20s profile=%s%s\n' "$slug" "$profile" \
+  printf 'launched %-20s profile=%s tool=%s%s\n' "$slug" "$profile" "$tool" \
     "${model:+ model=$model}"
   printf '  worktree %s\n  branch   %s (from %s)\n' "$wt" "$branch" "${base_sha:0:8}"
 }
@@ -135,7 +176,7 @@ cmd_status() {
   local root="$FLEET_HOME/$(basename "$REPO")"
   [ -d "$root" ] || { echo "no agents for $(basename "$REPO")"; return 0; }
 
-  printf '%-22s %-10s %-12s %-22s %s\n' TASK STATE PROFILE MODEL CHANGES
+  printf '%-22s %-10s %-4s %-12s %-24s %s\n' TASK STATE TOOL PROFILE MODEL CHANGES
   local d slug wt files
   for d in "$root"/*/; do
     [ -f "$d/meta.json" ] || continue
@@ -149,8 +190,8 @@ cmd_status() {
       files=$(git -C "$wt" diff --name-only "$(meta_get "$d" base_sha)" 2>/dev/null | wc -l)
       files="$files file(s)"
     fi
-    printf '%-22s %-10s %-12s %-22s %s\n' "$slug" "$(state_of "$d")" \
-      "$(meta_get "$d" profile)" "$(meta_get "$d" model)" "$files"
+    printf '%-22s %-10s %-4s %-12s %-24s %s\n' "$slug" "$(state_of "$d")" \
+      "$(meta_get "$d" tool)" "$(meta_get "$d" profile)" "$(meta_get "$d" model)" "$files"
   done
 }
 
@@ -187,16 +228,24 @@ cmd_resume() {
   require_slug "$slug" resume
   [ -n "$prompt" ] || die "resume: --prompt or --prompt-file is required"
 
-  local wt sid profile model; wt=$(meta_get "$DIR" worktree)
+  local wt sid profile model tool; wt=$(meta_get "$DIR" worktree)
   sid=$(meta_get "$DIR" session_id); profile=$(meta_get "$DIR" profile); model=$(meta_get "$DIR" model)
+  tool=$(meta_get "$DIR" tool); [ -n "$tool" ] || tool=ccs   # older runs predate the tool field
   [ "$(state_of "$DIR")" = "running" ] && die "resume: '$slug' is still running"
 
-  local -a argv=(ccs "$profile")
-  [ -n "$model" ] && argv+=(--model "$model")
-  argv+=(--resume "$sid" -p "$prompt")
+  local -a argv=()
+  if [ "$tool" = ccs ]; then
+    argv=(ccs "$profile")
+    [ -n "$model" ] && argv+=(--model "$model")
+    argv+=(--resume "$sid" -p "$prompt")
+  else
+    [ -n "$sid" ] || die "resume: no conversation id recorded for '$slug' yet — check: ccs-fleet.sh log $slug"
+    argv=(agy --model "$model" --dangerously-skip-permissions \
+      --add-dir "$wt" --conversation "$sid" --output-format json -p "$prompt")
+  fi
 
   rm -f "$DIR/exit_code"
-  setsid bash -c 'echo $$ >"$3/pid"; cd "$1" && timeout "$2" "${@:5}" >>"$3/run.log" 2>&1; rc=$?; "$4" _autocommit "$3" >>"$3/run.log" 2>&1; echo $rc >"$3/exit_code"' \
+  setsid bash -c 'echo $$ >"$3/pid"; cd "$1" && timeout "$2" "${@:5}" >>"$3/run.log" 2>&1; rc=$?; "$4" _finish "$3" >>"$3/run.log" 2>&1; echo $rc >"$3/exit_code"' \
     _ "$wt" "$DEFAULT_TIMEOUT" "$DIR" "$SELF" "${argv[@]}" </dev/null >/dev/null 2>&1 &
   disown %% 2>/dev/null
   printf 'resumed %s (session %s)\n' "$slug" "${sid:0:8}"
@@ -260,14 +309,45 @@ stage_and_commit() {
     printf 'skipped as build artifacts (add to .gitignore or CCS_FLEET_EXCLUDES_FILE if wrong):\n'
     printf '  %s\n' $skipped; }
 
-  git -C "$wt" -c commit.gpgsign=false commit -q -m "$(printf 'ccs-fleet(%s): %s\n\nDelegated to CCS profile %s.\n' \
-    "$slug" "$(head -c 120 "$dir/brief.md" | tr '\n' ' ')" "$(meta_get "$dir" profile)")"
+  git -C "$wt" -c commit.gpgsign=false commit -q -m "$(printf 'ccs-fleet(%s): %s\n\nDelegated via %s profile %s.\n' \
+    "$slug" "$(head -c 120 "$dir/brief.md" | tr '\n' ' ')" \
+    "$(meta_get "$dir" tool)" "$(meta_get "$dir" profile)")"
+}
+
+# agy hands back its conversation_id in the JSON blob on stdout rather than
+# accepting a caller-chosen id up front the way --session-id does for ccs, so
+# the id has to be pulled out of run.log after the fact. Scans from the end
+# and takes the last line that parses as JSON, in case anything else ever
+# lands in the log ahead of it.
+agy_conversation_id() {
+  python3 -c 'import json,sys
+for line in reversed(open(sys.argv[1]).read().splitlines()):
+    line = line.strip()
+    if not line.startswith("{"):
+        continue
+    try:
+        d = json.loads(line)
+    except Exception:
+        continue
+    print(d.get("conversation_id", ""))
+    break' "$1" 2>/dev/null
 }
 
 # Called by the detached runner once the agent exits. Never fails the run.
-cmd_autocommit() {
+cmd_finish() {
   local dir=$1
   [ -f "$dir/meta.json" ] || return 0
+
+  if [ "$(meta_get "$dir" tool)" = agy ] && [ -z "$(meta_get "$dir" session_id)" ]; then
+    local cid; cid=$(agy_conversation_id "$dir/run.log")
+    if [ -n "$cid" ]; then
+      python3 -c 'import json,sys
+d = json.load(open(sys.argv[1]))
+d["session_id"] = sys.argv[2]
+json.dump(d, open(sys.argv[1], "w"), indent=2)' "$dir/meta.json" "$cid"
+    fi
+  fi
+
   stage_and_commit "$dir" "$(meta_get "$dir" worktree)" "$(meta_get "$dir" slug)" || true
   return 0
 }
@@ -313,16 +393,19 @@ case "${1:-}" in
   log)    shift; cmd_log "$@" ;;
   diff)   shift; cmd_diff "$@" ;;
   resume) shift; cmd_resume "$@" ;;
-  _autocommit) shift; cmd_autocommit "$@" ;;
+  _finish) shift; cmd_finish "$@" ;;
   land)   shift; cmd_land "$@" ;;
   clean)  shift; cmd_clean "$@" ;;
   *) cat <<'USAGE'
-ccs-fleet.sh — isolated CCS coding agents, one git worktree each
+ccs-fleet.sh — isolated CCS/agy coding agents, one git worktree each
 
-  launch --task <slug> --profile <nvidia|deepseek> [--model <m>]
+  launch --task <slug> --profile <profile> [--model <m>]
          (--prompt <text> | --prompt-file <path>) [--base <ref>] [--repo <path>]
-  status                       one line per agent: state, profile, files changed
-  log <slug>                   raw CCS output for that agent
+         profiles: nvidia, deepseek           (CCS, local)
+                   agy-flash, agy-pro,        (Antigravity/Gemini + Claude
+                   agy-sonnet, agy-opus        via Google, remote & billed)
+  status                       one line per agent: state, tool, profile, files changed
+  log <slug>                   raw CCS/agy output for that agent
   diff <slug>                  everything the agent changed, vs. the commit it started from
   resume <slug> --prompt <t>   another turn in the same agent's session, same worktree
   land <slug>                  commit the agent's work and merge its branch into HEAD

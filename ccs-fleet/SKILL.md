@@ -1,23 +1,30 @@
 ---
 name: ccs-fleet
 description: >-
-  Deploy coding agents through the CCS CLI (`ccs <profile> -p`), each isolated in
-  its own git worktree and branch, running on the local `nvidia` and `deepseek`
-  profiles. Use this skill whenever the user wants work handed to another model
-  rather than done here — "use ccs", "deploy/spin up agents", "delegate this",
-  "farm this out", "fan these out", "run these in parallel", "get deepseek to do
-  it", "send this to nemotron/nvidia/flash" — and whenever they list several
-  independent chores at once, since that is the case parallel agents exist for.
-  Also use it to check on, resume, review, land, or clean up agents already
-  launched. Prefer this over hand-rolled `ccs` calls: raw `ccs -p` edits the
-  working tree unattended, and this skill is what keeps that contained.
+  Deploy coding agents through the CCS CLI (`ccs <profile> -p`) and the
+  Antigravity CLI (`agy <profile> -p`), each isolated in its own git worktree
+  and branch. Backends: `nvidia`/`deepseek` (CCS, local, free-or-cheap) and
+  `agy-flash`/`agy-pro`/`agy-sonnet`/`agy-opus` (Antigravity, remote and
+  billed — Gemini 3.7 Flash, Gemini 3.1 Pro, Claude Sonnet 4.6, Claude Opus
+  4.6). Use this skill whenever the user wants work handed to another model
+  rather than done here — "use ccs", "use agy"/"antigravity", "deploy/spin up
+  agents", "delegate this", "farm this out", "fan these out", "run these in
+  parallel", "get deepseek to do it", "send this to nemotron/nvidia/flash/
+  gemini/sonnet/opus-on-agy" — and whenever they list several independent
+  chores at once, since that is the case parallel agents exist for. Also use
+  it to check on, resume, review, land, or clean up agents already launched.
+  Prefer this over hand-rolled `ccs`/`agy` calls: both write files unattended
+  with no permission prompt, and this skill is what keeps that contained.
 ---
 
 # CCS Fleet
 
 Delegate work to other models by launching real coding agents — each one a
-headless Claude Code session pointed at a non-Anthropic backend, running in a
-throwaway git worktree so its edits stay quarantined until reviewed.
+headless session pointed at a non-Anthropic backend, running in a throwaway
+git worktree so its edits stay quarantined until reviewed. Two backends are
+wired up: CCS (`nvidia`, `deepseek`, local) and Antigravity (`agy-*`, Google's
+CLI, remote and billed — it's how Gemini and, at a price, Sonnet/Opus get
+into the fleet).
 
 Everything runs through the bundled script:
 
@@ -25,11 +32,15 @@ Everything runs through the bundled script:
 scripts/ccs-fleet.sh
 ```
 
-Use it rather than calling `ccs` directly. A bare `ccs <profile> -p "..."` runs
-in whatever directory you happen to be in and **writes files with no permission
-prompt** — mixed into uncommitted work, its changes become very hard to
-separate from the user's. The script's whole job is to make each agent's output
-land as a reviewable diff on a branch of its own.
+Use it rather than calling `ccs`/`agy` directly. A bare `ccs <profile> -p
+"..."` or `agy -p "..." --dangerously-skip-permissions` runs in whatever
+directory you happen to be in and **writes files with no permission prompt**
+— mixed into uncommitted work, its changes become very hard to separate from
+the user's. The script's whole job is to make each agent's output land as a
+reviewable diff on a branch of its own — it also fixes an agy-specific trap:
+agy only writes into directories it already trusts, and silently redirects
+anywhere else to its own scratch folder instead of erroring, so the script
+always passes `--add-dir` on the worktree to grant trust for that run.
 
 ## Deciding what to delegate
 
@@ -55,24 +66,41 @@ is a poor fit and then do as they asked; the call is theirs.
 
 ## Choosing a profile
 
-Two profiles are configured. Pick by task shape, and say in one clause why:
+Six profiles are configured, across two backends. Default routing is:
+**reach for Antigravity first, matching the model to the task, and fall back
+to deepseek when Antigravity is rate-limited or genuinely the wrong tool for
+the job.** Pick by task shape, and say in one clause why:
 
 | Task shape | Use | Why |
 |---|---|---|
+| Small, well-specified mechanical edits; fast turnaround wanted | `--profile agy-flash` | Gemini 3.7 Flash via Antigravity — quick and cheap, ample when the brief already contains the answer's shape. |
+| Multi-file changes, moderate reasoning, still routine | `--profile agy-pro` | Gemini 3.1 Pro — a step up from Flash for tasks needing more context-juggling without paying Claude-on-agy prices. |
+| Task specifically calls for Claude's judgment, and it's worth paying for | `--profile agy-sonnet` | Claude Sonnet 4.6 via Antigravity — expensive relative to the others, justified when the task shape genuinely wants Claude's style of reasoning over Gemini's. |
+| Hardest reasoning, worth the highest spend | `--profile agy-opus` | Claude Opus 4.6 via Antigravity — reserve for tasks that would otherwise stay here for lack of a cheaper agent that can do them. |
 | Bulk, repetitive, low-stakes; wrong answers cheap to throw away | `--profile nvidia` | Nemotron 3 Ultra on OpenRouter's free tier — genuinely free, and the slow one, since free requests queue. |
-| Small, well-specified mechanical edits | `--profile deepseek --model deepseek-v4-flash` | Fast and cheap; ample for edits where the brief already contains the answer's shape. |
-| Large context, many files at once, genuinely hard reasoning | `--profile deepseek` | Defaults to `deepseek-v4-pro[1m]` — the 1M window lets it read broadly instead of relying on you to pre-summarize the repo. |
+| Antigravity is rate-limited, or task needs a huge context window | `--profile deepseek` (add `--model deepseek-v4-flash` for small mechanical edits) | Defaults to `deepseek-v4-pro[1m]` — the 1M window handles large-context tasks Antigravity's models aren't suited for either. |
 
-The free tier has a **daily request cap**, and it fails expensively: an agent
-can run for minutes and many turns before dying on `429 · Rate limit exceeded:
-free-models-per-day`, having changed nothing. So when a fan-out matters, do not
-put every task on nvidia — and if one comes back `failed(1)`, check its `log`
-for a 429 before assuming the brief was at fault. Re-routing to deepseek is the
-fix; the cap resets daily.
+Antigravity is billed per token and Sonnet/Opus on it cost noticeably more
+than the Gemini tiers — worth it when the task shape specifically calls for
+Claude's reasoning, wasteful for something Flash would nail. Do not reach for
+`agy-sonnet`/`agy-opus` by default; use them when the task is hard enough that
+a cheaper agent would plausibly get it wrong, or the user says to.
 
-Honour an explicit request ("use nvidia for all of these") over this table. When
-fanning out several tasks, mixing profiles is good practice: it parallelizes
-across two providers instead of queueing behind one rate limit.
+Both backends fail expensively under rate limits — an agent can run for
+minutes before dying having changed nothing. nvidia's free tier has a daily
+cap (`429 · Rate limit exceeded: free-models-per-day`); Antigravity can hit
+its own quota or billing limits (check `log <slug>` for a `429` or a quota/
+billing message in the JSON `error` field). Either way, re-route rather than
+retry blind: nvidia → deepseek, and any `agy-*` profile → `deepseek` (its 1M
+context covers most of what the Antigravity tier would have handled). If a
+`agy-*` run comes back `failed(1)`, read its `log` for the reason before
+assuming the brief was at fault — it may be a quota, not a mistake.
+
+Honour an explicit request ("use nvidia for all of these", "keep this off
+agy") over this table. When fanning out several tasks, mixing profiles is
+good practice: it parallelizes across backends instead of queueing behind one
+rate limit, and keeps a quota hit on one backend from stalling the whole
+fan-out.
 
 ## Writing the brief
 
@@ -123,11 +151,11 @@ distinct slug.
 ```bash
 F=~/.claude/skills/ccs-fleet/scripts/ccs-fleet.sh
 
-$F launch --task parser-tests --profile deepseek --model deepseek-v4-flash --prompt-file /tmp/a.md
-$F launch --task doc-typos    --profile nvidia                             --prompt-file /tmp/b.md
-$F launch --task rename-util  --profile nvidia                             --prompt-file /tmp/c.md
+$F launch --task parser-tests  --profile agy-flash  --prompt-file /tmp/a.md
+$F launch --task doc-typos     --profile agy-flash  --prompt-file /tmp/b.md
+$F launch --task hard-refactor --profile agy-sonnet --prompt-file /tmp/c.md
 
-$F status          # TASK / STATE / PROFILE / MODEL / files changed
+$F status          # TASK / STATE / TOOL / PROFILE / MODEL / files changed
 ```
 
 Poll `status` rather than blocking; agents typically take from tens of seconds
@@ -186,10 +214,13 @@ fresh launch when the brief itself was the problem.
 Clean up landed and abandoned agents once done — stale worktrees accumulate and
 `git worktree list` gets noisy.
 
-## Reading CCS output
+## Reading CCS and agy output
 
-Two things in CCS's summary table are actively misleading, so do not pass them
-on to the user:
+CCS's and agy's `log <slug>` output look nothing alike, and each has its own
+trap.
+
+For **CCS** profiles (`nvidia`, `deepseek`), two things in its summary table
+are actively misleading, so do not pass them on to the user:
 
 - **`Cost`** is fabricated for these profiles — it applies Anthropic's price
   table to a model it does not recognise, and will happily report ~$0.12 for a
@@ -200,6 +231,14 @@ on to the user:
 
 `unrecognized_model` warnings and the `claude.ai connectors are disabled` notice
 are both normal for third-party profiles. They are not errors.
+
+For **agy** profiles (`agy-*`), `log <slug>` is a single JSON object —
+`{"conversation_id", "status", "response", "duration_seconds", "usage", ...}`.
+This is more trustworthy than CCS's table: `status` is `"SUCCESS"` or
+`"ERROR"` and lines up with the process exit code, `usage` is real token
+counts, and there's no fabricated cost figure to filter out. If `status` is
+`"ERROR"`, the `error` field states the reason directly (bad model name,
+quota/billing limit, etc.) — read it before re-routing or relaunching.
 
 For error codes, session mechanics, and the state layout, see
 `references/mechanics.md`.
