@@ -11,6 +11,15 @@ maps in a repository fog ledger. See [fog/SKILL.md](fog/SKILL.md); the reasoning
 behind a standalone ledger is in
 [fog/docs/adr/0001-standalone-cross-map-fog-ledger.md](fog/docs/adr/0001-standalone-cross-map-fog-ledger.md).
 
+## ccs-fleet
+
+Deploy coding agents through the [CCS](https://github.com/kaitranntt/ccs) CLI,
+each isolated in its own git worktree and branch, so an agent that writes files
+unattended cannot touch the tree you are working in. Covers profile routing,
+writing briefs an agent can follow cold, and reviewing before landing. See
+[ccs-fleet/SKILL.md](ccs-fleet/SKILL.md); the verified CLI mechanics and failure
+modes are in [ccs-fleet/references/mechanics.md](ccs-fleet/references/mechanics.md).
+
 ## Installing
 
 Symlink a skill into your Claude Code skills directory, so edits here are live
@@ -19,4 +28,5 @@ without a copy step:
 ```sh
 git clone git@github.com:Kylevdm/skills.git ~/skills
 ln -s ~/skills/fog ~/.claude/skills/fog
+ln -s ~/skills/ccs-fleet ~/.claude/skills/ccs-fleet
 ```
