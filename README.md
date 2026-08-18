@@ -20,6 +20,14 @@ writing briefs an agent can follow cold, and reviewing before landing. See
 [ccs-fleet/SKILL.md](ccs-fleet/SKILL.md); the verified CLI mechanics and failure
 modes are in [ccs-fleet/references/mechanics.md](ccs-fleet/references/mechanics.md).
 
+## ccs-fleet-update
+
+Maintenance skill for ccs-fleet itself: add/remove/rename a profile, point a
+profile at a different model, or rebalance the routing table when pricing or
+quota changes. Keeps the script, SKILL.md, mechanics.md, evals, and both
+install locations in sync instead of hand-editing ccs-fleet's files
+directly. See [ccs-fleet-update/SKILL.md](ccs-fleet-update/SKILL.md).
+
 ## Installing
 
 Symlink a skill into your Claude Code skills directory, so edits here are live
@@ -29,4 +37,8 @@ without a copy step:
 git clone git@github.com:Kylevdm/skills.git ~/skills
 ln -s ~/skills/fog ~/.claude/skills/fog
 ln -s ~/skills/ccs-fleet ~/.claude/skills/ccs-fleet
+ln -s ~/skills/ccs-fleet-update ~/.claude/skills/ccs-fleet-update
 ```
+
+(On this machine the installed skills are plain copies, not symlinks —
+`ccs-fleet-update` accounts for that and syncs with `rsync` instead.)
