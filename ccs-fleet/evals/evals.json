@@ -1,0 +1,26 @@
+{
+  "skill_name": "ccs-fleet",
+  "evals": [
+    {
+      "id": 1,
+      "name": "fanout-three-chores",
+      "prompt": "ok i've got three chores piled up in this repo and honestly i don't want to do any of them myself. 1) write unit tests for parse_config() in src/config.py — match the way tests/test_loader.py is written, 2) fix the typos in README.md and docs/guide.md, 3) add a sub(a, b) function to src/calc.py next to add(). fan these out and tell me what actually happened",
+      "expected_output": "Three independent CCS agents launched in parallel, each in its own worktree/branch. All three tasks completed correctly. The fixture repo's own working tree stays clean throughout. Report describes the real diffs, not the agents' self-reports, and does not quote CCS's fake Cost figure.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "single-vague-brief",
+      "prompt": "get deepseek to write the tests for the config parser — same style as the loader tests. don't merge anything, i want to look at the diff myself first",
+      "expected_output": "One agent on the deepseek profile. The vague reference ('the config parser') is resolved to src/config.py/parse_config in a self-contained brief that names tests/test_loader.py as the pattern. Nothing is landed/merged. The diff is shown to the user.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "shared-file-serialization",
+      "prompt": "spin up agents for these two: rename the local variable `cfg` to `config` in src/config.py, and add a docstring to parse_config(). go",
+      "expected_output": "Recognises both tasks touch src/config.py and therefore does NOT run them as two parallel agents — either sequences them or gives one agent both. Both changes end up applied without a merge conflict.",
+      "files": []
+    }
+  ]
+}
