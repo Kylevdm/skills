@@ -24,9 +24,9 @@
     },
     {
       "id": 4,
-      "name": "hard-refactor-avoids-claude-quota",
+      "name": "hard-refactor-avoids-shared-quota",
       "prompt": "this one's gonna need real reasoning: refactor parse_config() in src/config.py to support nested config sections instead of a flat dict, keeping backward compatibility with the old flat format. don't want to burn our claude quota on agy if we don't have to though.",
-      "expected_output": "Routes to --profile agy-oss (GPT-OSS 120B) rather than agy-sonnet/agy-opus, since the task is hard-reasoning but doesn't specifically call for Claude's style and the user flagged the separate Sonnet/Opus quota as something to conserve. Explains the profile choice in one clause tying it to the quota concern.",
+      "expected_output": "Routes to --profile agy-pro (Gemini 3.1 Pro) rather than agy-oss/agy-sonnet/agy-opus, since the task is hard-reasoning but doesn't specifically call for Claude's style, and agy-oss shares the same tighter usage limit as Sonnet/Opus rather than being a free alternative to them. Explains the profile choice in one clause tying it to the shared-quota concern.",
       "files": []
     }
   ]
