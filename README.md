@@ -28,6 +28,17 @@ quota changes. Keeps the script, SKILL.md, mechanics.md, evals, and both
 install locations in sync instead of hand-editing ccs-fleet's files
 directly. See [ccs-fleet-update/SKILL.md](ccs-fleet-update/SKILL.md).
 
+## ccs-delegation
+
+Single-shot delegation to one CCS profile (`ccs {profile} -p "task"`), no
+worktree isolation — for one task at a time rather than fanning several out.
+Every delegated task is framed as an `/implement` run per the mattpocock
+`implement` skill (TDD at seams, typecheck, full suite, commit); code-review
+is never delegated, the orchestrating session always runs it against the
+result before calling the task done. See
+[ccs-delegation/SKILL.md](ccs-delegation/SKILL.md). Reach for `ccs-fleet`
+instead when tasks are independent and worth parallelizing.
+
 ## Installing
 
 Symlink a skill into your Claude Code skills directory, so edits here are live
@@ -38,6 +49,7 @@ git clone git@github.com:Kylevdm/skills.git ~/skills
 ln -s ~/skills/fog ~/.claude/skills/fog
 ln -s ~/skills/ccs-fleet ~/.claude/skills/ccs-fleet
 ln -s ~/skills/ccs-fleet-update ~/.claude/skills/ccs-fleet-update
+ln -s ~/skills/ccs-delegation ~/.claude/skills/ccs-delegation
 ```
 
 (On this machine the installed skills are plain copies, not symlinks —
