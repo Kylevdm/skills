@@ -6,10 +6,11 @@ description: >-
   and branch. Backends: `deepseek` (CCS, local, cheap) and
   `agy-flash`/`agy-pro`/`agy-oss`/`agy-sonnet`/`agy-opus` (Antigravity, remote
   and billed — Gemini 3.7 Flash, Gemini 3.1 Pro, GPT-OSS 120B, Claude Sonnet
-  4.6, Claude Opus 4.6). `agy-sonnet`/`agy-opus` draw down a separate,
-  tighter Antigravity usage limit from the rest of the fleet, so `agy-oss`
-  (GPT-OSS 120B) is the default for hard-reasoning tasks that don't
-  specifically need Claude. Use this skill whenever the user wants work
+  4.6, Claude Opus 4.6). `agy-oss`/`agy-sonnet`/`agy-opus` draw down a
+  separate, tighter Antigravity usage limit than `agy-flash`/`agy-pro`, so
+  `agy-pro` (Gemini 3.1 Pro) is the default for cheap/easy work and the
+  first reach even for harder reasoning, before spending that tighter quota
+  on GPT-OSS or Claude. Use this skill whenever the user wants work
   handed to another model
   rather than done here — "use ccs", "use agy"/"antigravity", "deploy/spin up
   agents", "delegate this", "farm this out", "fan these out", "run these in
@@ -28,10 +29,12 @@ headless session pointed at a non-Anthropic backend, running in a throwaway
 git worktree so its edits stay quarantined until reviewed. Two backends are
 wired up: CCS (`deepseek`, local) and Antigravity (`agy-*`, Google's
 CLI, remote and billed — it's how Gemini, GPT-OSS 120B, and, at a price,
-Sonnet/Opus get into the fleet). Antigravity meters `agy-sonnet`/`agy-opus`
-against a separate, tighter usage limit than its other models, so `agy-oss`
-is the go-to for reasoning-heavy work that doesn't specifically need Claude
-— it keeps the Sonnet/Opus quota free for the tasks that actually do.
+Sonnet/Opus get into the fleet). Antigravity meters `agy-oss`, `agy-sonnet`,
+and `agy-opus` together against a separate, tighter usage limit than
+`agy-flash`/`agy-pro` — GPT-OSS shares the Claude models' quota, it is not a
+free alternative to them. `agy-pro` is the go-to for reasoning-heavy work
+that doesn't specifically need Claude's style; it keeps the shared
+GPT-OSS/Sonnet/Opus quota free for the tasks that actually need it.
 
 Everything runs through the bundled script:
 
@@ -81,19 +84,20 @@ the job.** Pick by task shape, and say in one clause why:
 | Task shape | Use | Why |
 |---|---|---|
 | Small, well-specified mechanical edits; fast turnaround wanted | `--profile agy-flash` | Gemini 3.7 Flash via Antigravity — quick and cheap, ample when the brief already contains the answer's shape. |
-| Multi-file changes, moderate reasoning, still routine | `--profile agy-pro` | Gemini 3.1 Pro — a step up from Flash for tasks needing more context-juggling without paying Claude-on-agy prices. |
-| Harder reasoning — refactors, tricky logic, ambiguous specs — that doesn't specifically need Claude's style | `--profile agy-oss` | GPT-OSS 120B via Antigravity — the default reach for anything Flash/Pro would plausibly get wrong. Sits outside the Sonnet/Opus quota, so lean on it before paying that limit down. |
-| Task specifically calls for Claude's judgment, and it's worth spending the separate quota on | `--profile agy-sonnet` | Claude Sonnet 4.6 via Antigravity — draws down a tighter, separate usage limit from the rest of the fleet. Reach for `agy-oss` first; use this only when the task shape genuinely wants Claude's reasoning over GPT-OSS's or Gemini's. |
-| Hardest reasoning, worth spending the Claude-on-agy quota | `--profile agy-opus` | Claude Opus 4.6 via Antigravity — same separate quota as `agy-sonnet`, spent only on tasks that would otherwise stay here for lack of a cheaper agent that can do them. |
+| Multi-file changes, moderate-to-harder reasoning — refactors, tricky logic, ambiguous specs — that doesn't specifically need Claude's style | `--profile agy-pro` | Gemini 3.1 Pro — the default reach for anything beyond Flash's easy cases. Sits outside the GPT-OSS/Sonnet/Opus quota, so lean on it before paying that limit down, and cheap/easy work belongs here rather than on `agy-oss`. |
+| Reasoning genuinely too hard for Gemini, still not specifically needing Claude's style | `--profile agy-oss` | GPT-OSS 120B via Antigravity — draws down the same tighter, separate usage limit as Sonnet/Opus, so it is not a free alternative to them. Reach for it only when `agy-pro` plausibly can't do the task, not as a default. |
+| Task specifically calls for Claude's judgment, and it's worth spending the separate quota on | `--profile agy-sonnet` | Claude Sonnet 4.6 via Antigravity — draws down the same tighter, separate usage limit as `agy-oss`. Reach for `agy-pro` first; use this only when the task shape genuinely wants Claude's reasoning over GPT-OSS's or Gemini's. |
+| Hardest reasoning, worth spending the Claude-on-agy quota | `--profile agy-opus` | Claude Opus 4.6 via Antigravity — same separate quota as `agy-sonnet`/`agy-oss`, spent only on tasks that would otherwise stay here for lack of a cheaper agent that can do them. |
 | Antigravity is rate-limited, task needs a huge context window, or the work is bulk/low-stakes and cheap answers are fine | `--profile deepseek` (add `--model deepseek-v4-flash` for small mechanical edits) | Defaults to `deepseek-v4-pro[1m]` — the 1M window handles large-context tasks Antigravity's models aren't suited for either, and `deepseek-v4-flash` is cheap enough for bulk, throwaway work. |
 
-Antigravity meters `agy-sonnet`/`agy-opus` against their own separate,
-tighter usage limit — distinct from the quota that `agy-flash`/`agy-pro`/
-`agy-oss` share — so treat that limit as scarce even when the general
-Antigravity quota has headroom. Reach for `agy-oss` first for anything that
-needs reasoning beyond Flash/Pro; only step up to `agy-sonnet`/`agy-opus`
-when the task genuinely wants Claude's style of reasoning specifically, or
-the user says to.
+Antigravity meters `agy-oss`, `agy-sonnet`, and `agy-opus` together against
+their own separate, tighter usage limit — distinct from the quota that
+`agy-flash`/`agy-pro` share — so treat that limit as scarce even when the
+general Antigravity quota has headroom. GPT-OSS is not exempt from it: reach
+for `agy-pro` first for anything Flash can't handle, including harder
+reasoning, and only step up to `agy-oss`/`agy-sonnet`/`agy-opus` when Gemini
+plausibly can't do the task, or the task genuinely wants Claude's style of
+reasoning specifically, or the user says to.
 
 Both backends fail expensively under rate limits — an agent can run for
 minutes before dying having changed nothing. Antigravity can hit its own
@@ -101,8 +105,9 @@ quota or billing limits (check `log <slug>` for a `429` or a quota/billing
 message in the JSON `error` field). Re-route rather than retry blind: any
 `agy-*` profile → `deepseek` (its 1M context covers most of what the
 Antigravity tier would have handled). If the failure is specifically
-`agy-sonnet`/`agy-opus` hitting their own quota while the rest of Antigravity
-is fine, try `agy-oss` before falling all the way back to deepseek. If an
+`agy-oss`/`agy-sonnet`/`agy-opus` hitting their shared quota while the rest
+of Antigravity is fine, try `agy-pro` before falling all the way back to
+deepseek. If an
 `agy-*` run comes back `failed(1)`, read its `log` for the reason before
 assuming the brief was at fault — it may be a quota, not a mistake.
 
@@ -163,7 +168,7 @@ F=~/.claude/skills/ccs-fleet/scripts/ccs-fleet.sh
 
 $F launch --task parser-tests  --profile agy-flash --prompt-file /tmp/a.md
 $F launch --task doc-typos     --profile agy-flash --prompt-file /tmp/b.md
-$F launch --task hard-refactor --profile agy-oss    --prompt-file /tmp/c.md
+$F launch --task hard-refactor --profile agy-pro    --prompt-file /tmp/c.md
 
 $F status          # TASK / STATE / TOOL / PROFILE / MODEL / files changed
 ```
