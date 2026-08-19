@@ -16,17 +16,24 @@ description: >-
   agents", "delegate this", "farm this out", "fan these out", "run these in
   parallel", "get deepseek to do it", "send this to flash/
   gemini/gpt-oss/sonnet/opus-on-agy" — and whenever they list several independent
-  chores at once, since that is the case parallel agents exist for. Also use
-  it to check on, resume, review, land, or clean up agents already launched.
-  Prefer this over hand-rolled `ccs`/`agy` calls: both write files unattended
-  with no permission prompt, and this skill is what keeps that contained.
+  chores at once, since that is the case parallel agents exist for. Every
+  brief is framed as an /implement run per the mattpocock implement skill
+  (seams, TDD, typecheck, full suite, commit), with code-review always kept
+  local rather than delegated. Also use it to check on, resume, review, land,
+  or clean up agents already launched. Prefer this over hand-rolled
+  `ccs`/`agy` calls: both write files unattended with no permission prompt,
+  and this skill is what keeps that contained.
 ---
 
 # CCS Fleet
 
 Delegate work to other models by launching real coding agents — each one a
 headless session pointed at a non-Anthropic backend, running in a throwaway
-git worktree so its edits stay quarantined until reviewed. Two backends are
+git worktree so its edits stay quarantined until reviewed. Every brief is
+framed as an `/implement` run (seams -> TDD -> typecheck -> full suite ->
+commit), per the mattpocock `implement` skill, with the review beat carved
+out and kept local: the delegated agent never reviews its own diff, you do,
+before `land`. Two backends are
 wired up: CCS (`deepseek`, local) and Antigravity (`agy-*`, Google's
 CLI, remote and billed — it's how Gemini, GPT-OSS 120B, and, at a price,
 Sonnet/Opus get into the fleet). Antigravity meters `agy-oss`, `agy-sonnet`,
@@ -135,6 +142,24 @@ A brief worth sending states, concretely:
 - **The boundary** — what to leave alone. Agents left unbounded reformat
   neighbouring code and inflate the diff you have to review.
 
+Underneath those five, every brief carries the same fixed harness, borrowed
+from the mattpocock `implement` skill — don't re-derive it per task, just
+apply it:
+
+1. Work out the seams from the brief before writing code.
+2. Drive TDD at those seams — red, then green, one slice at a time.
+3. Typecheck as it goes; run single test files along the way.
+4. Run the full test suite once, at the end.
+5. Commit to the branch (the worktree setup means this is always safe — it's
+   isolated from your own tree).
+
+Do not ask the agent to "just write the code" — ask for these five beats
+explicitly, the same way you'd invoke `/implement` yourself. And do not ask
+it to review its own work, run `/code-review`, or judge whether it's done:
+that step is deliberately never delegated — you do it, on `$F diff <slug>`,
+before `land` (see Reviewing and landing below). A model grading its own diff
+tends to miss what it got wrong.
+
 Use `--prompt-file` for anything beyond a sentence. It sidesteps shell quoting
 entirely, and long briefs are exactly where quoting breaks.
 
@@ -147,9 +172,15 @@ existing tests in tests/test_loader.py — same fixtures, same assert style.
 
 Cover: a valid config, a missing required key, and a malformed YAML file.
 
+Work test-first: write one failing test, make it pass, repeat per case.
+Typecheck and run tests/test_config.py as you go; run the full suite once at
+the end. Commit your work to this branch when done.
+
 Verify with: pytest tests/test_config.py
 
 Do not modify src/config.py itself, and do not touch any other test file.
+Do not review your own work or run code-review — just commit when the suite
+is green.
 BRIEF
 
 scripts/ccs-fleet.sh launch --task parser-tests \
@@ -197,6 +228,14 @@ success while having edited the wrong thing, and an exit code of 0 only means
 the process ended, not that the task was done. `status` counts every file the agent
 touched since it started, so `0 file(s)` on a `done` agent means it changed
 nothing at all — a result worth reporting rather than quietly relaunching.
+
+This is beat 6 of the Implementation Framework, and it is yours alone: run
+`/code-review` against `$F diff <slug>` before `land`, the same way `implement`
+runs code-review before its own commit. The delegated agent was never asked to
+review itself, so nothing has checked this diff yet except you. Act on what it
+finds — fix small things directly in the worktree before landing, or `resume`
+the agent with the specific findings for anything substantial. Only call the
+task done once your review has passed.
 
 `land` refuses to merge while the user's own working tree is dirty, because a
 merge conflict tangled with uncommitted work is a genuinely unpleasant thing to
