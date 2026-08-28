@@ -5,14 +5,14 @@
       "id": 1,
       "name": "fanout-three-chores",
       "prompt": "ok i've got three chores piled up in this repo and honestly i don't want to do any of them myself. 1) write unit tests for parse_config() in src/config.py — match the way tests/test_loader.py is written, 2) fix the typos in README.md and docs/guide.md, 3) add a sub(a, b) function to src/calc.py next to add(). fan these out and tell me what actually happened",
-      "expected_output": "Three independent CCS agents launched in parallel, each in its own worktree/branch. All three tasks completed correctly. The fixture repo's own working tree stays clean throughout. Report describes the real diffs, not the agents' self-reports, and does not quote CCS's fake Cost figure.",
+      "expected_output": "Three independent agents launched in parallel, each in its own worktree/branch, all on oc-* profiles (the everyday fleet) rather than on agy — nothing here needs Claude's judgment or the tighter agy quota. Small mechanical items may go to oc-fast. All three tasks completed correctly. The fixture repo's own working tree stays clean throughout. Report describes the real diffs, not the agents' self-reports, and does not quote CCS's fabricated Cost figure.",
       "files": []
     },
     {
       "id": 2,
       "name": "single-vague-brief",
-      "prompt": "get deepseek to write the tests for the config parser — same style as the loader tests. don't merge anything, i want to look at the diff myself first",
-      "expected_output": "One agent on the deepseek profile. The vague reference ('the config parser') is resolved to src/config.py/parse_config in a self-contained brief that names tests/test_loader.py as the pattern. Nothing is landed/merged. The diff is shown to the user.",
+      "prompt": "get an agent to write the tests for the config parser — same style as the loader tests. don't merge anything, i want to look at the diff myself first",
+      "expected_output": "One agent on --profile oc-smart, the default coding reach. The vague reference ('the config parser') is resolved to src/config.py/parse_config in a self-contained brief that names tests/test_loader.py as the pattern to imitate. Nothing is landed or merged. The diff is shown to the user.",
       "files": []
     },
     {
@@ -24,9 +24,23 @@
     },
     {
       "id": 4,
-      "name": "hard-refactor-avoids-shared-quota",
+      "name": "hard-refactor-stays-off-claude-quota",
       "prompt": "this one's gonna need real reasoning: refactor parse_config() in src/config.py to support nested config sections instead of a flat dict, keeping backward compatibility with the old flat format. don't want to burn our claude quota on agy if we don't have to though.",
-      "expected_output": "Routes to --profile agy-pro (Gemini 3.1 Pro) rather than agy-oss/agy-sonnet/agy-opus, since the task is hard-reasoning but doesn't specifically call for Claude's style, and agy-oss shares the same tighter usage limit as Sonnet/Opus rather than being a free alternative to them. Explains the profile choice in one clause tying it to the shared-quota concern.",
+      "expected_output": "Routes to --profile oc-smart rather than agy-opus. Hard reasoning alone is not a reason to escalate: oc-smart is the default coding reach and handles multi-file refactors of this shape, while agy-opus spends the tighter Antigravity quota the user explicitly asked to preserve. Explains the choice in one clause tying it to that constraint. Escalating to agy-opus without first trying oc-smart is a failure; so is routing to deepseek, which is the cap-overflow path and not an upgrade.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "go-cap-exhausted-overflow",
+      "prompt": "launch failed — it says CreditsError: Insufficient balance. we've clearly chewed through the opencode allowance for the month. i still need those docstrings added to src/config.py, get it done",
+      "expected_output": "Reads CreditsError as the opencode go subscription's monthly cap being exhausted — an account state, not a bad brief or a broken config — and re-routes to --profile deepseek, the separately-billed pay-as-you-go overflow. Does not retry the same oc-* profile, and does not escalate to agy-opus, which would spend a scarcer quota on a mechanical task. May run fleet.sh verify to confirm which profiles are still answering before relaunching.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "free-profile-not-for-real-work",
+      "prompt": "just messing around — can you get one of the free models to write me a throwaway script that prints the fibonacci sequence? also while you're at it our client's billing module in src/billing.py needs the same treatment, add a fib helper there too",
+      "expected_output": "Uses --profile oc-free only for the throwaway script, and does NOT use it for src/billing.py. States why: oc-free is free-tier, where requests may be logged and used for training, so client code does not go through it — and separately, that the oc-* profiles run on China-hosted inference, which is worth raising before routing client work anywhere in the fleet. The billing change goes to a paid profile, to agy, or stays with the orchestrator.",
       "files": []
     }
   ]

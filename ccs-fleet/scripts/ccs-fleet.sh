@@ -12,6 +12,7 @@ set -uo pipefail
 SELF=$(readlink -f "${BASH_SOURCE[0]}")
 FLEET_HOME="${CCS_FLEET_HOME:-$HOME/.ccs/fleet}"
 DEFAULT_TIMEOUT="${CCS_FLEET_TIMEOUT:-1800}"
+PREFLIGHT_TIMEOUT="${CCS_FLEET_PREFLIGHT_TIMEOUT:-20}"
 
 die() { printf 'ccs-fleet: %s\n' "$*" >&2; exit 1; }
 
@@ -35,29 +36,170 @@ except Exception:
 
 alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
 
+# The fleet, and what each profile is supposed to be pointed at.
+#
+#   name | tool | base url | model | transport
+#
+# For ccs profiles the last three columns are what `verify` compares the live
+# `~/.ccs/<name>.settings.json` against, so a profile that drifts back to the
+# unfunded PAYG endpoint, or picks up a `[1m]` suffix that opencode's
+# subscription rejects, is caught by a command instead of by a hung agent.
+# For agy profiles only the model column is meaningful — agy takes a full
+# model id per invocation rather than reading a profile file.
+#
+# `transport` is the value of CCS_DROID_PROVIDER, and it is load-bearing
+# rather than cosmetic: ccs routes any profile resolving to an
+# OpenAI-compatible provider through its own local Anthropic->OpenAI proxy
+# daemon, and sends the rest straight at the upstream's `/v1/messages`.
+# `anthropic` here means "go direct"; `generic-chat-completion-api` means
+# "ccs will start and own a proxy for this one".
+fleet_profiles() {
+  cat <<'PROFILES'
+oc-fast|ccs|https://opencode.ai/zen/go|deepseek-v4-flash|anthropic
+oc-smart|ccs|https://opencode.ai/zen/go|deepseek-v4-pro|anthropic
+oc-free|ccs|https://opencode.ai/zen|hy3-free|generic-chat-completion-api
+deepseek|ccs|https://api.deepseek.com/anthropic|deepseek-v4-pro[1m]|anthropic
+agy-gemini|agy|-|gemini-3.1-pro-high|-
+agy-opus|agy|-|claude-opus-4-6-thinking|-
+PROFILES
+}
+
+profile_field() { fleet_profiles | awk -F'|' -v p="$1" -v n="$2" '$1==p{print $n}'; }
+profile_names() { fleet_profiles | cut -d'|' -f1 | tr '\n' ' '; }
+
 # Which backend a profile runs on. ccs and agy are different CLIs with
 # different invocation shapes (session handling, workspace trust, output
 # format), so every code path that builds an argv or resumes a session has
 # to branch on this.
 tool_for_profile() {
-  case "$1" in
-    deepseek)                                           echo ccs ;;
-    agy-flash|agy-pro|agy-oss|agy-sonnet|agy-opus)      echo agy ;;
-    *) die "unknown profile '$1' (deepseek, agy-flash, agy-pro, agy-oss, agy-sonnet, agy-opus)" ;;
-  esac
+  local t; t=$(profile_field "$1" 2)
+  [ -n "$t" ] || die "unknown profile '$1' (known: $(profile_names))"
+  printf '%s\n' "$t"
 }
 
 # agy takes a full model id rather than defaulting one per profile the way
 # ccs profiles do, so each agy profile needs an explicit default. --model
 # still overrides these, same as on the ccs side.
-agy_default_model() {
-  case "$1" in
-    agy-flash)  echo gemini-3.7-flash-high ;;
-    agy-pro)    echo gemini-3.1-pro-high ;;
-    agy-oss)    echo gpt-oss-120b-medium ;;
-    agy-sonnet) echo claude-sonnet-4-6 ;;
-    agy-opus)   echo claude-opus-4-6-thinking ;;
+agy_default_model() { profile_field "$1" 4; }
+
+# --- preflight -------------------------------------------------------------
+
+# One value out of a ccs profile's settings file, never the whole file:
+# ~/.ccs/*.settings.json hold live API tokens in plaintext and must not reach
+# a transcript or a log.
+ccs_setting() {
+  python3 -c 'import json,sys
+try:
+    env = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+env = env.get("env", env)
+print(env.get(sys.argv[2], ""))' "$HOME/.ccs/$1.settings.json" "$2" 2>/dev/null
+}
+
+# Ask an endpoint for 24 real tokens and print what it says back. Succeeds
+# quietly with a sample of the reply; fails printing the upstream's own
+# error text.
+#
+# This has to be a completion rather than a `/v1/models` listing. The outage
+# this exists to catch — every profile pointed at opencode's unfunded PAYG
+# endpoint instead of the subscription path — answered `/v1/models` with a
+# clean 200 and only failed on generation, with a 401 that Claude Code's SDK
+# read as `authentication_failed` and retried ten times behind exponential
+# backoff. That cost 118 seconds and destroyed the real message on the way.
+# `CreditsError: Insufficient balance` and `RegionError: requires explicit
+# opt in` each name their own fix; surfacing them is the whole job here.
+probe_endpoint() {
+  # probe_endpoint <base-url> <key> <model> <anthropic|openai>
+  python3 - "$1" "$2" "$3" "$4" "$PREFLIGHT_TIMEOUT" <<'PY'
+import json, sys, urllib.error, urllib.request
+
+base, key, model, fmt, timeout = sys.argv[1:6]
+base = base.rstrip("/")
+leaf = "/chat/completions" if fmt == "openai" else "/messages"
+url = base + (leaf if base.endswith("/v1") else "/v1" + leaf)
+
+payload = {"model": model, "max_tokens": 24,
+           "messages": [{"role": "user", "content": "reply with the single word: ok"}]}
+req = urllib.request.Request(
+    url, data=json.dumps(payload).encode(), method="POST",
+    headers={"content-type": "application/json",
+             "x-api-key": key,
+             "authorization": "Bearer " + key,
+             "anthropic-version": "2023-06-01",
+             # opencode.ai sits behind Cloudflare, which 403s the default
+             # `Python-urllib/3.x` agent with `error code: 1010` — a bot-signature
+             # block that looks exactly like a dead profile if you don't know it.
+             # Any honest agent string is accepted.
+             "user-agent": "ccs-fleet-preflight/1"})
+
+
+def upstream_error(body):
+    """The provider's own words for what went wrong, or None if it didn't."""
+    err = body.get("error")
+    if not err:
+        return None
+    if isinstance(err, dict):
+        return ": ".join(p for p in (err.get("type"), err.get("message")) if p) \
+            or json.dumps(err)[:200]
+    return str(err)[:200]
+
+
+try:
+    with urllib.request.urlopen(req, timeout=float(timeout)) as r:
+        body = json.loads(r.read().decode("utf-8", "replace"))
+except urllib.error.HTTPError as e:
+    raw = e.read().decode("utf-8", "replace")
+    try:
+        detail = upstream_error(json.loads(raw))
+    except ValueError:
+        detail = None
+    print("HTTP %d - %s" % (e.code, detail or " ".join(raw.split())[:200] or e.reason))
+    sys.exit(1)
+except Exception as e:
+    print("%s: %s" % (type(e).__name__, e))
+    sys.exit(1)
+
+# A 200 is not proof of life: these gateways will hand back an error object
+# with it.
+detail = upstream_error(body)
+if detail:
+    print(detail)
+    sys.exit(1)
+
+if fmt == "openai":
+    choices = body.get("choices") or [{}]
+    text = choices[0].get("message", {}).get("content") or ""
+else:
+    text = "".join(b.get("text", "") for b in body.get("content", [])
+                   if b.get("type") == "text")
+# An empty reply is still a working profile — reasoning models routinely spend
+# all 24 tokens thinking. Only an error means the profile is dead.
+print(" ".join(str(text).split())[:48] or "(no text in 24 tokens, but the call succeeded)")
+PY
+}
+
+# Probe a ccs profile the way ccs itself will actually reach it.
+probe_ccs_profile() {
+  local profile=$1 model=${2:-} base key transport fmt
+  base=$(ccs_setting "$profile" ANTHROPIC_BASE_URL)
+  key=$(ccs_setting "$profile" ANTHROPIC_AUTH_TOKEN)
+  [ -n "$key" ] || key=$(ccs_setting "$profile" ANTHROPIC_API_KEY)
+  transport=$(ccs_setting "$profile" CCS_DROID_PROVIDER)
+  [ -n "$model" ] || model=$(ccs_setting "$profile" ANTHROPIC_MODEL)
+
+  [ -n "$base" ] || { printf 'no ANTHROPIC_BASE_URL in ~/.ccs/%s.settings.json (registered? try: ccs api list)\n' "$profile"; return 1; }
+  [ -n "$key" ]  || { printf 'no API key in ~/.ccs/%s.settings.json\n' "$profile"; return 1; }
+  [ -n "$model" ] || { printf 'no ANTHROPIC_MODEL in ~/.ccs/%s.settings.json\n' "$profile"; return 1; }
+
+  # ccs hands an OpenAI-compatible profile to its own local proxy, which calls
+  # `/chat/completions` upstream. Probing `/v1/messages` for those would report
+  # a failure the real run never hits, so follow the same rule ccs does.
+  case "$transport" in
+    generic-chat-completion-api|openai) fmt=openai ;;
+    *)                                  fmt=anthropic ;;
   esac
+  probe_endpoint "$base" "$key" "$model" "$fmt"
 }
 
 state_of() {
@@ -84,6 +226,7 @@ state_of() {
 
 cmd_launch() {
   local slug="" profile="" model="" base="" repo="." prompt="" prompt_file=""
+  local preflight="${CCS_FLEET_NO_PREFLIGHT:+no}"
   while [ $# -gt 0 ]; do
     case "$1" in
       --task|--slug)  slug=$2; shift 2 ;;
@@ -93,6 +236,7 @@ cmd_launch() {
       --repo)         repo=$2; shift 2 ;;
       --prompt)       prompt=$2; shift 2 ;;
       --prompt-file)  prompt_file=$2; shift 2 ;;
+      --no-preflight) preflight=no; shift ;;
       *) die "launch: unknown option '$1'" ;;
     esac
   done
@@ -102,7 +246,28 @@ cmd_launch() {
   case "$slug" in *[!a-zA-Z0-9._-]*) die "launch: --task must be [a-zA-Z0-9._-] only";; esac
 
   local tool; tool=$(tool_for_profile "$profile") || exit 1
-  [ "$tool" = agy ] && model=${model:-$(agy_default_model "$profile")}
+
+  # agy is optional. Without it the agy-* profiles are simply unavailable, and
+  # saying so beats a `command not found` inside a detached runner that shows
+  # up minutes later as `failed(127)`.
+  if [ "$tool" = agy ]; then
+    command -v agy >/dev/null 2>&1 || die "profile '$profile' needs the agy CLI, which is not installed.
+  agy is optional. Either do this task in the orchestrator yourself, or pick a
+  ccs profile: oc-smart, oc-fast, oc-free, deepseek."
+    model=${model:-$(agy_default_model "$profile")}
+  fi
+
+  # Preflight before the worktree exists, so a dead profile leaves nothing to
+  # clean up. ~2s to a real error beats 118s to a wrong one.
+  if [ "$tool" = ccs ] && [ "${preflight:-yes}" != no ]; then
+    local probe
+    if ! probe=$(probe_ccs_profile "$profile" "$model"); then
+      die "profile '$profile' is not answering — nothing was launched.
+  upstream: $probe
+  details:  $(basename "$SELF") verify $profile
+  override: --no-preflight"
+    fi
+  fi
 
   if [ -n "$prompt_file" ]; then
     [ -f "$prompt_file" ] || die "launch: no such prompt file: $prompt_file"
@@ -194,6 +359,116 @@ cmd_status() {
     printf '%-22s %-10s %-4s %-12s %-24s %s\n' "$slug" "$(state_of "$d")" \
       "$(meta_get "$d" tool)" "$(meta_get "$d" profile)" "$(meta_get "$d" model)" "$files"
   done
+}
+
+# --- verify ----------------------------------------------------------------
+
+verify_row() { printf '%-11s %-4s %-6s %s\n' "$1" "$2" "$3" "$4"; }
+
+# Config drift and a live probe, per profile. Reports the upstream's own words
+# for a failure and names any way the live config has wandered from the table
+# above — a base URL that slid back to the unfunded PAYG path, a model id the
+# subscription rejects, a transport that would silently start a proxy daemon.
+# Drift is worth printing even when the probe passes: it is how a profile ends
+# up quietly serving something other than what the routing table promises.
+cmd_verify() {
+  local -a profiles=("$@")
+  [ ${#profiles[@]} -gt 0 ] || read -r -a profiles <<< "$(profile_names)"
+
+  local rc=0 p tool base_want model_want transport_want
+  local base model transport probe drift
+  verify_row PROFILE TOOL RESULT DETAIL
+  for p in "${profiles[@]}"; do
+    tool=$(profile_field "$p" 2)
+    if [ -z "$tool" ]; then
+      verify_row "$p" "?" FAIL "not a fleet profile (known: $(profile_names))"; rc=1; continue
+    fi
+    model_want=$(profile_field "$p" 4)
+
+    if [ "$tool" = agy ]; then
+      if ! command -v agy >/dev/null 2>&1; then
+        verify_row "$p" agy skip "agy not installed — optional, fleet degrades to the orchestrator"
+        continue
+      fi
+      if agy models 2>/dev/null | cut -f1 | grep -qx -- "$model_want"; then
+        verify_row "$p" agy ok "$model_want"
+      else
+        verify_row "$p" agy FAIL "'$model_want' is not in \`agy models\` — the id moved or was retired"; rc=1
+      fi
+      continue
+    fi
+
+    base_want=$(profile_field "$p" 3); transport_want=$(profile_field "$p" 5)
+    base=$(ccs_setting "$p" ANTHROPIC_BASE_URL)
+    model=$(ccs_setting "$p" ANTHROPIC_MODEL)
+    transport=$(ccs_setting "$p" CCS_DROID_PROVIDER)
+
+    if [ -z "$base" ]; then
+      verify_row "$p" ccs FAIL "no ~/.ccs/$p.settings.json — run: $(basename "$SELF") provision"; rc=1; continue
+    fi
+
+    drift=""
+    [ "$base" = "$base_want" ]           || drift+="base=$base (want $base_want); "
+    [ "$model" = "$model_want" ]         || drift+="model=$model (want $model_want); "
+    [ "$transport" = "$transport_want" ] || drift+="transport=${transport:-unset} (want $transport_want); "
+
+    if probe=$(probe_ccs_profile "$p"); then
+      if [ -n "$drift" ]; then
+        verify_row "$p" ccs drift "${drift%; }"
+      else
+        verify_row "$p" ccs ok "$model -> \"$probe\""
+      fi
+    else
+      verify_row "$p" ccs FAIL "$probe"; rc=1
+      [ -n "$drift" ] && verify_row "" "" "" "drift: ${drift%; }"
+    fi
+  done
+  return $rc
+}
+
+# --- provision -------------------------------------------------------------
+
+# Recreate the ccs side of the fleet from scratch, so a new machine is one
+# command. `ccs api create` writes the settings file and registers the profile,
+# but it guesses `generic-chat-completion-api` for any base URL it doesn't
+# recognise — which would put oc-fast and oc-smart behind a proxy daemon
+# they don't need — so the transport and the cheap haiku-tier mapping are
+# corrected afterwards.
+cmd_provision() {
+  local key="${OPENCODE_API_KEY:-}"
+  [ -n "$key" ] || die "provision: set OPENCODE_API_KEY to your opencode.ai key first.
+  The deepseek profile needs DEEPSEEK_API_KEY too if you want it provisioned."
+  command -v ccs >/dev/null 2>&1 || die "provision: the ccs CLI is not installed"
+
+  local p tool base model transport k haiku
+  while IFS='|' read -r p tool base model transport; do
+    [ "$tool" = ccs ] || continue
+    k=$key
+    if [ "$p" = deepseek ]; then
+      k="${DEEPSEEK_API_KEY:-}"
+      [ -n "$k" ] || { printf 'skipping %s (no DEEPSEEK_API_KEY)\n' "$p"; continue; }
+    fi
+    ccs api create "$p" --base-url "$base" --api-key "$k" --model "$model" \
+      --target claude --force --yes >/dev/null 2>&1 \
+      || { printf 'provision: ccs api create failed for %s\n' "$p" >&2; continue; }
+
+    # The cheapest model on the same endpoint absorbs Claude Code's background
+    # haiku-tier calls, so trivia doesn't burn the tier the task is paying for.
+    haiku=$model
+    case "$base" in *opencode.ai/zen/go) haiku=deepseek-v4-flash ;; esac
+    case "$base" in *api.deepseek.com*)  haiku=deepseek-v4-flash ;; esac
+    python3 -c 'import json,sys
+path, transport, haiku = sys.argv[1:4]
+d = json.load(open(path)); d.setdefault("env", {})
+d["env"]["CCS_DROID_PROVIDER"] = transport
+d["env"]["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = haiku
+json.dump(d, open(path, "w"), indent=2)
+open(path, "a").write("\n")' "$HOME/.ccs/$p.settings.json" "$transport" "$haiku" \
+      || die "provision: could not finish writing ~/.ccs/$p.settings.json"
+    printf 'provisioned %-9s %s  %s (%s)\n' "$p" "$base" "$model" "$transport"
+  done < <(fleet_profiles)
+
+  printf '\nnow: %s verify\n' "$(basename "$SELF")"
 }
 
 # --- inspect ---------------------------------------------------------------
@@ -397,20 +672,31 @@ case "${1:-}" in
   _finish) shift; cmd_finish "$@" ;;
   land)   shift; cmd_land "$@" ;;
   clean)  shift; cmd_clean "$@" ;;
+  verify) shift; cmd_verify "$@" ;;
+  provision) shift; cmd_provision "$@" ;;
   *) cat <<'USAGE'
 ccs-fleet.sh — isolated CCS/agy coding agents, one git worktree each
 
   launch --task <slug> --profile <profile> [--model <m>]
          (--prompt <text> | --prompt-file <path>) [--base <ref>] [--repo <path>]
-         profiles: deepseek                    (CCS, local)
-                   agy-flash, agy-pro, agy-oss,  (Antigravity/Gemini + GPT-OSS +
-                   agy-sonnet, agy-opus           Claude via Google, remote & billed)
+         [--no-preflight]
+         profiles: oc-smart   deepseek-v4-pro    default coding reach
+                   oc-fast    deepseek-v4-flash  cheapest, mechanical edits
+                   oc-free    hy3-free           throwaway; id rots, check verify
+                   deepseek   deepseek-v4-pro[1m]  overflow once go's cap is hit
+                   agy-gemini gemini-3.1-pro-high   research, not coding
+                   agy-opus   claude-opus-4-6-thinking  frontier escape hatch
   status                       one line per agent: state, tool, profile, files changed
   log <slug>                   raw CCS/agy output for that agent
   diff <slug>                  everything the agent changed, vs. the commit it started from
   resume <slug> --prompt <t>   another turn in the same agent's session, same worktree
   land <slug>                  commit the agent's work and merge its branch into HEAD
   clean <slug> [--force]       delete the worktree, branch, and run state
+  verify [profile...]          probe every profile; report upstream errors and config drift
+  provision                    (re)create the ccs profiles from OPENCODE_API_KEY
+
+Env: CCS_FLEET_HOME, CCS_FLEET_TIMEOUT (1800s), CCS_FLEET_EXCLUDES_FILE,
+     CCS_FLEET_PREFLIGHT_TIMEOUT (20s), CCS_FLEET_NO_PREFLIGHT
 USAGE
      exit 1 ;;
 esac

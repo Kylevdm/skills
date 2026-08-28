@@ -3,38 +3,35 @@ name: ccs-fleet
 description: >-
   Deploy coding agents through the CCS CLI (`ccs <profile> -p`) and the
   Antigravity CLI (`agy <profile> -p`), each isolated in its own git worktree
-  and branch. Backends: `deepseek` (CCS, local, cheap) and
-  `agy-flash`/`agy-pro`/`agy-oss`/`agy-sonnet`/`agy-opus` (Antigravity, remote
-  and billed — Gemini 3.7 Flash, Gemini 3.1 Pro, GPT-OSS 120B, Claude Sonnet
-  4.6, Claude Opus 4.6). `agy-oss`/`agy-sonnet`/`agy-opus` draw down a
-  separate, tighter Antigravity usage limit than `agy-flash`/`agy-pro`, so
-  `agy-pro` (Gemini 3.1 Pro) is the default for cheap/easy work and the
-  first reach even for harder reasoning, before spending that tighter quota
-  on GPT-OSS or Claude. Use this skill whenever the user wants work
-  handed to another model
-  rather than done here — "use ccs", "use agy"/"antigravity", "deploy/spin up
-  agents", "delegate this", "farm this out", "fan these out", "run these in
-  parallel", "get deepseek to do it", "send this to flash/
-  gemini/gpt-oss/sonnet/opus-on-agy" — and whenever they list several independent
-  chores at once, since that is the case parallel agents exist for. Also use
-  it to check on, resume, review, land, or clean up agents already launched.
-  Prefer this over hand-rolled `ccs`/`agy` calls: both write files unattended
-  with no permission prompt, and this skill is what keeps that contained.
+  and branch. Profiles: `oc-smart`/`oc-fast` (opencode Zen go subscription —
+  DeepSeek V4 Pro and Flash), `oc-free` (free-tier, throwaway work only),
+  `deepseek` (DeepSeek's own API, the overflow once the subscription's
+  monthly cap is hit), and `agy-gemini`/`agy-opus` (Antigravity — Gemini 3.1
+  Pro for research, Claude Opus 4.6 as the frontier escape hatch, on a
+  tighter quota). Use this skill whenever the user wants work handed to
+  another model rather than done here — "use ccs", "use agy"/"antigravity",
+  "use opencode/zen", "deploy/spin up agents", "delegate this", "farm this
+  out", "fan these out", "run these in parallel", "get
+  deepseek/gemini/opus to do it" — and whenever they list several
+  independent chores at once, since that is the case parallel agents exist
+  for. Also use it to check on, resume, review, land, or clean
+  up agents already launched. Prefer this over hand-rolled `ccs`/`agy` calls:
+  both write files unattended with no permission prompt, and this skill is
+  what keeps that contained.
 ---
 
 # CCS Fleet
 
 Delegate work to other models by launching real coding agents — each one a
 headless session pointed at a non-Anthropic backend, running in a throwaway
-git worktree so its edits stay quarantined until reviewed. Two backends are
-wired up: CCS (`deepseek`, local) and Antigravity (`agy-*`, Google's
-CLI, remote and billed — it's how Gemini, GPT-OSS 120B, and, at a price,
-Sonnet/Opus get into the fleet). Antigravity meters `agy-oss`, `agy-sonnet`,
-and `agy-opus` together against a separate, tighter usage limit than
-`agy-flash`/`agy-pro` — GPT-OSS shares the Claude models' quota, it is not a
-free alternative to them. `agy-pro` is the go-to for reasoning-heavy work
-that doesn't specifically need Claude's style; it keeps the shared
-GPT-OSS/Sonnet/Opus quota free for the tasks that actually need it.
+git worktree so its edits stay quarantined until reviewed.
+
+Two backends. **CCS** carries the everyday fleet: `oc-*` on the opencode Zen
+`go` subscription (flat $10/mo against a $60 monthly usage cap) and
+`deepseek` on DeepSeek's own pay-as-you-go API. **Antigravity** (`agy-*`) is
+the frontier reach — Gemini and Claude, on a tighter quota, and optional: if
+`agy` isn't installed those two profiles are simply unavailable and the work
+stays here.
 
 Everything runs through the bundled script:
 
@@ -44,13 +41,22 @@ scripts/ccs-fleet.sh
 
 Use it rather than calling `ccs`/`agy` directly. A bare `ccs <profile> -p
 "..."` or `agy -p "..." --dangerously-skip-permissions` runs in whatever
-directory you happen to be in and **writes files with no permission prompt**
-— mixed into uncommitted work, its changes become very hard to separate from
-the user's. The script's whole job is to make each agent's output land as a
-reviewable diff on a branch of its own — it also fixes an agy-specific trap:
-agy only writes into directories it already trusts, and silently redirects
-anywhere else to its own scratch folder instead of erroring, so the script
-always passes `--add-dir` on the worktree to grant trust for that run.
+directory you happen to be in and **writes files with no permission prompt** —
+mixed into uncommitted work, its changes become very hard to separate from the
+user's. The script's job is to make each agent's output land as a reviewable
+diff on a branch of its own. It also probes the profile before launching, so a
+misconfigured backend dies in a second with the provider's own error instead of
+hanging for two minutes, and passes agy the `--add-dir` it needs to write into
+a worktree at all.
+
+## The `oc-*` profiles route code to China-hosted inference
+
+`oc-fast`, `oc-smart`, and `oc-free` all run on models served from China —
+reaching them required enabling opencode's China-hosting opt-in on the
+workspace. That is a data-residency question, not a performance one. Raise it
+before sending client code, proprietary source, or anything under a
+contractual hosting constraint through them; `agy-*` and the orchestrator are
+the alternatives.
 
 ## Deciding what to delegate
 
@@ -64,10 +70,11 @@ module with an established test style, mechanical renames, filling in
 boilerplate. If you can state what "done" looks like in a sentence or two, an
 agent can hit it.
 
-Keep work here when the task needs judgment you cannot fully write down: architecture and design decisions, security-sensitive code,
-debugging that requires forming and testing hypotheses, performance work needing
-measurement, or anything governed by a project rule the agent could plausibly
-violate without knowing it. When a repo's `CLAUDE.md` states a hard constraint,
+Keep work here when the task needs judgment you cannot fully write down:
+architecture and design decisions, security-sensitive code, debugging that
+requires forming and testing hypotheses, performance work needing measurement,
+or anything governed by a project rule the agent could plausibly violate
+without knowing it. When a repo's `CLAUDE.md` states a hard constraint,
 delegating work that brushes against it is a bad trade — repeat the constraint
 verbatim in the brief, or keep the task.
 
@@ -76,46 +83,50 @@ is a poor fit and then do as they asked; the call is theirs.
 
 ## Choosing a profile
 
-Six profiles are configured, across two backends. Default routing is:
-**reach for Antigravity first, matching the model to the task, and fall back
-to deepseek when Antigravity is rate-limited or genuinely the wrong tool for
-the job.** Pick by task shape, and say in one clause why:
+Work down this list and stop at the first line that fits. Say in one clause why.
 
-| Task shape | Use | Why |
-|---|---|---|
-| Small, well-specified mechanical edits; fast turnaround wanted | `--profile agy-flash` | Gemini 3.7 Flash via Antigravity — quick and cheap, ample when the brief already contains the answer's shape. |
-| Multi-file changes, moderate-to-harder reasoning — refactors, tricky logic, ambiguous specs — that doesn't specifically need Claude's style | `--profile agy-pro` | Gemini 3.1 Pro — the default reach for anything beyond Flash's easy cases. Sits outside the GPT-OSS/Sonnet/Opus quota, so lean on it before paying that limit down, and cheap/easy work belongs here rather than on `agy-oss`. |
-| Reasoning genuinely too hard for Gemini, still not specifically needing Claude's style | `--profile agy-oss` | GPT-OSS 120B via Antigravity — draws down the same tighter, separate usage limit as Sonnet/Opus, so it is not a free alternative to them. Reach for it only when `agy-pro` plausibly can't do the task, not as a default. |
-| Task specifically calls for Claude's judgment, and it's worth spending the separate quota on | `--profile agy-sonnet` | Claude Sonnet 4.6 via Antigravity — draws down the same tighter, separate usage limit as `agy-oss`. Reach for `agy-pro` first; use this only when the task shape genuinely wants Claude's reasoning over GPT-OSS's or Gemini's. |
-| Hardest reasoning, worth spending the Claude-on-agy quota | `--profile agy-opus` | Claude Opus 4.6 via Antigravity — same separate quota as `agy-sonnet`/`agy-oss`, spent only on tasks that would otherwise stay here for lack of a cheaper agent that can do them. |
-| Antigravity is rate-limited, task needs a huge context window, or the work is bulk/low-stakes and cheap answers are fine | `--profile deepseek` (add `--model deepseek-v4-flash` for small mechanical edits) | Defaults to `deepseek-v4-pro[1m]` — the 1M window handles large-context tasks Antigravity's models aren't suited for either, and `deepseek-v4-flash` is cheap enough for bulk, throwaway work. |
+1. **Default coding work, including hard multi-file refactors** →
+   `--profile oc-smart` (DeepSeek V4 Pro). The fleet's normal reach, and
+   stronger than "default" suggests: everything else on this list is a reason
+   to deviate, and difficulty alone is not one of them.
+2. **Small, well-specified mechanical edits, fast turnaround** →
+   `--profile oc-fast` (DeepSeek V4 Flash). Same endpoint, ~3× cheaper against
+   the cap, ample when the brief already contains the answer's shape.
+3. **The subscription's $60 monthly cap is exhausted** → `--profile deepseek`.
+   DeepSeek's own pay-as-you-go API, which bills separately. It is the overflow
+   path, not an upgrade — same model family as `oc-smart`.
+4. **The task genuinely needs Claude's judgment and is worth the tighter
+   quota** → `--profile agy-opus` (Claude Opus 4.6). The escape hatch for work
+   that would otherwise stay here for lack of an agent that can do it, and the
+   only escalation above `oc-smart` — so escalate on task *kind*, not on a
+   hunch that something is difficult.
+5. **Research rather than coding** — reading docs, surveying approaches,
+   answering an open question → `--profile agy-gemini` (Gemini 3.1 Pro).
+6. **Not worth the overhead of orchestrating, or `agy` is absent and the task
+   needed it** → do it here yourself. A one-line fix costs more to brief,
+   poll, and review than to make.
+7. **Playing, throwaway, or genuinely disposable output** → `--profile
+   oc-free`. Free-tier models: the id rots constantly, quality is low, and
+   **free-tier requests may be logged and used for training**. Never send real
+   work, proprietary code, or anything confidential through it.
 
-Antigravity meters `agy-oss`, `agy-sonnet`, and `agy-opus` together against
-their own separate, tighter usage limit — distinct from the quota that
-`agy-flash`/`agy-pro` share — so treat that limit as scarce even when the
-general Antigravity quota has headroom. GPT-OSS is not exempt from it: reach
-for `agy-pro` first for anything Flash can't handle, including harder
-reasoning, and only step up to `agy-oss`/`agy-sonnet`/`agy-opus` when Gemini
-plausibly can't do the task, or the task genuinely wants Claude's style of
-reasoning specifically, or the user says to.
-
-Both backends fail expensively under rate limits — an agent can run for
-minutes before dying having changed nothing. Antigravity can hit its own
-quota or billing limits (check `log <slug>` for a `429` or a quota/billing
-message in the JSON `error` field). Re-route rather than retry blind: any
-`agy-*` profile → `deepseek` (its 1M context covers most of what the
-Antigravity tier would have handled). If the failure is specifically
-`agy-oss`/`agy-sonnet`/`agy-opus` hitting their shared quota while the rest
-of Antigravity is fine, try `agy-pro` before falling all the way back to
-deepseek. If an
-`agy-*` run comes back `failed(1)`, read its `log` for the reason before
-assuming the brief was at fault — it may be a quota, not a mistake.
+There is deliberately no tier between `oc-smart` and `agy-opus`. A Qwen 3.8
+Max tier was built and then removed: on a hard nested-config refactor both it
+and `oc-smart` scored 16/16 against a hidden test suite, but Qwen took 1.9×
+as long and wrote 45% more code. `--model qwen3.8-max` on `oc-smart` is still
+there if a task ever wants a second opinion from a different model family.
 
 Honour an explicit request ("use deepseek for all of these", "keep this off
-agy") over this table. When fanning out several tasks, mixing profiles is
-good practice: it parallelizes across backends instead of queueing behind one
-rate limit, and keeps a quota hit on one backend from stalling the whole
-fan-out.
+agy") over this list. When fanning out several tasks, mixing profiles is good
+practice: it parallelizes across backends instead of queueing behind one rate
+limit. Only fan out genuinely independent tasks — two agents editing the same
+file will each succeed in their own worktree and then collide at merge, so if
+tasks share a file, run them in sequence or give one agent both.
+
+When something fails, read `log <slug>` before re-routing: a `429` or a quota
+message is a limit, not a bad brief. `agy-*` hitting its quota falls back to
+`oc-smart`; `oc-*` returning `CreditsError` means the subscription cap is gone
+and `deepseek` is the overflow.
 
 ## Writing the brief
 
@@ -153,8 +164,7 @@ Do not modify src/config.py itself, and do not touch any other test file.
 BRIEF
 
 scripts/ccs-fleet.sh launch --task parser-tests \
-  --profile deepseek --model deepseek-v4-flash \
-  --prompt-file /tmp/brief-parser-tests.md
+  --profile oc-fast --prompt-file /tmp/brief-parser-tests.md
 ```
 
 ## Running a fleet
@@ -166,9 +176,9 @@ distinct slug.
 ```bash
 F=~/.claude/skills/ccs-fleet/scripts/ccs-fleet.sh
 
-$F launch --task parser-tests  --profile agy-flash --prompt-file /tmp/a.md
-$F launch --task doc-typos     --profile agy-flash --prompt-file /tmp/b.md
-$F launch --task hard-refactor --profile agy-pro    --prompt-file /tmp/c.md
+$F launch --task parser-tests  --profile oc-fast  --prompt-file /tmp/a.md
+$F launch --task doc-typos     --profile oc-fast  --prompt-file /tmp/b.md
+$F launch --task hard-refactor --profile oc-smart --prompt-file /tmp/c.md
 
 $F status          # TASK / STATE / TOOL / PROFILE / MODEL / files changed
 ```
@@ -177,10 +187,6 @@ Poll `status` rather than blocking; agents typically take from tens of seconds
 to a few minutes. States are `running`, `done`, `failed(N)`, `timeout` (the
 30-minute cap, tunable with `CCS_FLEET_TIMEOUT`), or `died` (killed before it
 could record an exit code).
-
-Only fan out tasks that are genuinely independent. Two agents editing the same
-file will each succeed in their own worktree and then collide at merge — if
-tasks share a file, run them in sequence, or give one agent both.
 
 ## Reviewing and landing
 
@@ -194,26 +200,18 @@ $F clean <slug>    # remove worktree, branch, and run state
 Read the diff before landing, every time, and tell the user what the agent
 actually did rather than repeating its self-report — agents routinely claim
 success while having edited the wrong thing, and an exit code of 0 only means
-the process ended, not that the task was done. `status` counts every file the agent
-touched since it started, so `0 file(s)` on a `done` agent means it changed
-nothing at all — a result worth reporting rather than quietly relaunching.
+the process ended, not that the task was done. `status` counts every file the
+agent touched since it started, so `0 file(s)` on a `done` agent means it
+changed nothing at all — a result worth reporting rather than quietly
+relaunching.
 
-`land` refuses to merge while the user's own working tree is dirty, because a
-merge conflict tangled with uncommitted work is a genuinely unpleasant thing to
-unpick. Commit or stash first.
-
-It also prints the exact file list it is committing, and filters out ephemeral
-build artifacts — `__pycache__`, `.pytest_cache`, `.coverage`, `node_modules`
-and friends — which would otherwise be swept in by `git add -A` in any repo
-without a `.gitignore` covering them. Skipped paths are always named rather than
-silently dropped, so if a filter is wrong you can see it and correct it (add the
-path to the repo's `.gitignore`, or point `CCS_FLEET_EXCLUDES_FILE` at your own
-pattern file). An agent that produced nothing but artifacts makes `land` refuse
-rather than create an empty commit — worth reading its `log` when that happens,
-because it usually means the agent never did the work.
+`land` refuses to merge into a dirty working tree — commit or stash first. It
+prints the file list it is committing and filters ephemeral build artifacts
+(`__pycache__`, `node_modules` and friends), always naming what it skipped
+rather than dropping it silently; override with `CCS_FLEET_EXCLUDES_FILE`.
 
 Each agent commits its own work to its branch as it finishes, so `git diff
-main..ccs/<slug>` is a real record and `land` is just the merge. `clean` still
+main..ccs/<slug>` is a real record and `land` is just the merge. `clean`
 deletes the branch, so clean up only what you have reviewed.
 
 If an agent got close but missed, `resume` continues that same session in the
@@ -226,39 +224,45 @@ $F resume <slug> --prompt "You edited src/config.py; the brief said not to. Reve
 That is usually a better move than relaunching, and it is cheaper. Reach for a
 fresh launch when the brief itself was the problem.
 
-Clean up landed and abandoned agents once done — stale worktrees accumulate and
-`git worktree list` gets noisy.
+## When a profile stops working
+
+```bash
+$F verify              # probe every profile; or: $F verify oc-smart
+```
+
+Each profile gets a real 24-token completion and reports the provider's own
+error, plus any drift between the live config and what the fleet expects. This
+is the first thing to run when a launch is refused or an agent fails oddly —
+it is also what catches `oc-free`'s model id rotting away, which happens often.
+`--model <another-free-id>` works around that for one run.
+
+The launch preflight uses the same probe, so a dead profile costs about a
+second and names its own cause: `CreditsError: Insufficient balance` means the
+`go` cap is exhausted (route to `deepseek`), `RegionError` means the workspace
+opt-in lapsed, `ModelError: not supported` means the id is wrong for that
+endpoint. Pass `--no-preflight` to skip it.
 
 ## Reading CCS and agy output
 
-CCS's and agy's `log <slug>` output look nothing alike, and each has its own
-trap.
-
-For **CCS** profiles (`deepseek`), two things in its summary table
+For **CCS** profiles (`oc-*` and `deepseek`), two things in the summary table
 are actively misleading, so do not pass them on to the user:
 
-- **`Cost`** is fabricated for these profiles — it applies Anthropic's price
-  table to a model it does not recognise, and will happily report ~$0.12 for a
-  one-word reply. It is not what anything cost.
+- **`Cost`** is fabricated — it applies Anthropic's price table to a model it
+  does not recognise. It will report ~$0.21 for a one-word reply from a *free*
+  model. It is not what anything cost.
 - **`Model`** shows the profile default even when `--model` overrode it. The
-  override does take effect; the table just does not reflect it. The truth is in
-  the `[claude-code:unrecognized_model]` line in `$F log <slug>`.
+  override does take effect; the table just does not reflect it. The truth is
+  in the `[claude-code:unrecognized_model]` line in `$F log <slug>`.
 
-`unrecognized_model` warnings and the `claude.ai connectors are disabled` notice
-are both normal for third-party profiles. They are not errors.
+`unrecognized_model` warnings and the `claude.ai connectors are disabled`
+notice are both normal for third-party profiles. They are not errors.
 
-For **agy** profiles (`agy-*`), `log <slug>` is a single JSON object —
-`{"conversation_id", "status", "response", "duration_seconds", "usage", ...}`.
-This is more trustworthy than CCS's table: `status` is `"SUCCESS"` or
-`"ERROR"` and lines up with the process exit code, `usage` is real token
-counts, and there's no fabricated cost figure to filter out. If `status` is
-`"ERROR"`, the `error` field states the reason directly (bad model name,
-quota/billing limit, etc.) — read it before re-routing or relaunching. On
-`agy-oss` specifically, a `done` run can also come back `"SUCCESS"` with
-`0 file(s)` changed — the model narrated an edit it never made. Read
-`response` in the log before relaunching; usually the brief needs to say
-explicitly to use the file-editing tool and confirm the save, not switch
-profiles.
+For **agy** profiles, `log <slug>` is a single JSON object — `{"conversation_id",
+"status", "response", "duration_seconds", "usage", ...}`. This is more
+trustworthy than CCS's table: `status` is `"SUCCESS"` or `"ERROR"` and lines up
+with the process exit code, `usage` is real token counts, and there is no
+fabricated cost figure. If `status` is `"ERROR"`, the `error` field states the
+reason directly — read it before re-routing or relaunching.
 
-For error codes, session mechanics, and the state layout, see
+For error codes, session mechanics, endpoint details, and the state layout, see
 `references/mechanics.md`.

@@ -2,144 +2,160 @@
 name: ccs-fleet-update
 description: >-
   Update the ccs-fleet skill itself — add, remove, or rename a `ccs`/`agy`
-  profile, change which model a profile defaults to, or rebalance the
-  routing table when pricing/quota changes (e.g. "a new model showed up in
-  agy", "add gpt-oss to the fleet", "stop defaulting to sonnet/opus, they
-  have a separate usage limit", "nvidia's free tier changed", "rename this
-  profile", "the routing table is out of date"). Use this whenever the user
-  wants the ccs-fleet skill's config changed rather than run — this is the
-  maintenance skill for that skill. Always use this instead of hand-editing
-  ccs-fleet's files directly: it keeps the four touchpoints (script,
-  SKILL.md, mechanics.md, evals) and the two install locations in sync,
-  which is easy to half-do by hand.
+  profile, change which model a profile defaults to, repoint a profile at a
+  different endpoint, or rebalance the routing order when pricing/quota
+  changes (e.g. "the oc-free model id is dead again", "add a profile for the
+  new opencode model", "we hit the monthly cap, make deepseek the default",
+  "grok is available again", "the routing list is out of date"). Use this
+  whenever the user wants the ccs-fleet skill's config changed rather than
+  run — this is the maintenance skill for that skill. Always use this instead
+  of hand-editing ccs-fleet's files directly: it keeps the profile table, the
+  routing prose, mechanics.md, and the evals in sync, and it starts by
+  probing the live endpoints so a change is never made against a guess.
 ---
 
 # CCS Fleet Update
 
 Keep the [ccs-fleet](../ccs-fleet/SKILL.md) skill's profile/model config
 current. That skill routes work to `ccs` and `agy` backends; this skill is
-how you change *what* it routes to, safely and completely — the whole risk
-here is editing one of four touchpoints and forgetting the other three, or
-editing the repo copy and forgetting the skill only actually runs from the
-installed copy (or vice versa).
+how you change *what* it routes to, safely and completely.
+
+## Start by probing, never by guessing
+
+Model ids and endpoints churn constantly here — opencode's free ids rot
+within days, and its Anthropic-format support is per-model and server-side.
+So the first move on any change is always:
+
+```bash
+F=~/.claude/skills/ccs-fleet/scripts/ccs-fleet.sh
+$F verify                        # every profile: live probe + config drift
+agy models                       # agy's current ids and display names (agy profiles only)
+ccs api list                     # which ccs profiles are registered at all
+```
+
+`verify` sends each profile a real 24-token completion and prints the
+provider's own error. That matters more than it sounds: the outage this
+command was written for served `/v1/models` a clean 200 and only failed on
+generation, so a listing endpoint is not evidence a profile works.
+
+When adding or repointing a profile, probe the *specific model* before it
+goes in the table — opencode's Anthropic adapter covers only 6 of its 33 `go`
+models, and a model that answers `/chat/completions` fine will 500 on
+`/v1/messages`:
+
+```bash
+K=$(python3 -c 'import json;print(json.load(open("'"$HOME"'/.ccs/oc-fast.settings.json"))["env"]["ANTHROPIC_API_KEY"])')
+curl -s -m 30 -H "x-api-key: $K" -H "content-type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{"model":"<id>","max_tokens":24,"messages":[{"role":"user","content":"say ok"}]}' \
+  https://opencode.ai/zen/go/v1/messages
+```
+
+A 500 there means the model needs the OpenAI path instead, which means its
+profile needs `CCS_DROID_PROVIDER: generic-chat-completion-api` — see
+`references/mechanics.md` for why that one field decides the whole transport.
 
 ## Where things live
 
-Two directories that should be byte-identical, because they are not
-symlinked on this machine — check with `diff -rq` before you assume:
+Check before assuming, because this differs per machine:
 
-- Repo (source of truth, under version control): `~/Development/skills/ccs-fleet/`
-- Installed (what Claude Code actually loads): `~/.claude/skills/ccs-fleet/`
+```bash
+readlink -f ~/.claude/skills/ccs-fleet
+```
 
-Four files inside make up the config surface:
+On this machine `~/.claude/skills/ccs-fleet` is a **symlink** to
+`~/Development/skills/ccs-fleet`, so the repo copy *is* the installed copy and
+there is nothing to sync. If `readlink -f` ever comes back as a real directory
+of its own, the two are independent copies and every edit needs an
+`rsync -a --delete ~/Development/skills/ccs-fleet/ ~/.claude/skills/ccs-fleet/`
+afterwards, plus a `diff -rq` to confirm. Do not run that rsync blind — onto a
+symlink it is a no-op at best.
+
+Four files make up the config surface:
 
 | File | What lives there |
 |---|---|
-| `scripts/ccs-fleet.sh` | `tool_for_profile()` (profile → ccs/agy), `agy_default_model()` (profile → model id), the usage/help text at the bottom |
-| `SKILL.md` | frontmatter description (profile list + keywords), intro paragraph, the routing table + the prose around it, the `agy`/`ccs` example commands |
-| `references/mechanics.md` | verified CLI behavior — only touch this when you've verified something new about a model/profile, not for routing preference changes |
-| `evals/evals.json` | regression prompts; add one when a routing *preference* changes, so a future skill edit can't silently undo it |
-
-## Before touching anything: verify, don't guess
-
-A model id typed from memory is a coin flip. Confirm it against the actual
-tool before it goes in the script:
-
-```bash
-agy models                       # lists agy's current model ids + display names
-cat ~/.ccs/config.yaml           # ccs profiles (nvidia, deepseek, ...) and their settings files
-```
-
-If the user names a model casually ("gpt-oss", "the new gemini flash"), match
-it against what `agy models` actually prints — the id in the script must be
-the exact slug (e.g. `gpt-oss-120b-medium`, not `gpt-oss-120b`).
+| `scripts/ccs-fleet.sh` | `fleet_profiles()` — the one table of name/tool/endpoint/model/transport that `launch`, `verify`, and `provision` all read — plus the usage text at the bottom |
+| `SKILL.md` | frontmatter description (profile list + keywords), intro, the numbered routing list, the example commands |
+| `references/mechanics.md` | verified endpoint and CLI behaviour — only touch when you have *verified* something new, not for routing preference changes |
+| `evals/evals.json` | regression prompts; add one when a routing *preference* changes, so a future edit can't silently undo it |
 
 ## Making the change
 
-1. **Script first** (`scripts/ccs-fleet.sh`) — it's the only place that's
-   load-bearing at runtime; SKILL.md is guidance text that can drift without
-   breaking anything, but a wrong profile id here fails every launch.
-   - New profile: add to `tool_for_profile()`'s case statement (which
-     backend), `agy_default_model()` if it's an agy profile (the model id
-     from `agy models`), and the `die`/usage-text profile lists.
-   - Rebalance only (no new profile): script usually doesn't change — this
-     is a SKILL.md-only edit.
-   - Removed/renamed profile: grep the whole skill directory for the old
-     name before considering it done; a stale reference in prose is a worse
-     failure mode than a stale reference in code, because nothing errors on
-     it.
+1. **`fleet_profiles()` in the script first.** It is the only load-bearing
+   place: a wrong entry fails every launch, whereas SKILL.md is guidance that
+   degrades quietly. One row per profile,
+   `name|tool|base-url|model|transport`. For agy rows only the model column
+   is meaningful (`-` for the rest); the id must be the exact slug from `agy
+   models`. Adding or removing a row updates `tool_for_profile`,
+   `agy_default_model`, `verify`, and `provision` at once — but the usage
+   text at the bottom of the script is written by hand, so update it too.
 
-2. **SKILL.md** — update in this order, since each layer references the last:
-   - Frontmatter `description`: the profile/model list and the trigger
-     keywords (model nicknames people actually type — "gpt-oss", "flash",
-     "nemotron").
+   `transport` is `anthropic` for a profile that talks to the upstream
+   directly, and `generic-chat-completion-api` for one that has to go through
+   ccs's local Anthropic→OpenAI proxy. ccs starts and owns that daemon
+   itself; the script must never manage it.
+
+2. **The live `~/.ccs/*.settings.json`.** The script's table is what the
+   fleet *expects*; the settings files are what ccs actually reads. Change
+   both or `verify` will report drift. `$F provision` rewrites every ccs
+   profile from the table (needs `OPENCODE_API_KEY`, and `DEEPSEEK_API_KEY`
+   for the deepseek profile) — that is also how a new machine gets set up in
+   one command. Note that `ccs api create` writes
+   `CCS_DROID_PROVIDER: generic-chat-completion-api` for any base URL it does
+   not recognise, so a hand-run `ccs api create` needs that field corrected
+   afterwards; `provision` already does.
+
+3. **SKILL.md**, in this order, since each layer references the last:
+   - Frontmatter `description`: the profile list and the trigger keywords
+     people actually type ("opencode", "zen", "qwen", "opus").
    - Intro paragraph: same list, prose form.
-   - The routing table: this is the part that actually shapes behavior —
-     it's what Claude reads to pick a profile. State *why* a profile is the
-     right pick for its task shape, not just its name; that's what lets
-     future-you (or future-Claude) judge edge cases the table doesn't
-     enumerate. If the change is "reduce reliance on X", the lever is the
-     prose immediately after the table, not just moving X's row — say
-     explicitly what to reach for first and why the alternative costs more
-     (a separate quota, real billing, worse fit for the task shape).
-   - The `Running a fleet` example commands: keep them consistent with the
-     routing guidance you just wrote — an example that contradicts the
-     table it sits below undermines both.
+   - The numbered routing list: this is what actually shapes behaviour. Each
+     entry names a task shape and the reason that profile fits it — keep the
+     reason, since that is what lets a future reader judge the cases the list
+     doesn't enumerate. To reduce reliance on a profile, the lever is its
+     stated reason and its position in the order, not just deleting the row.
+   - The example commands: an example that contradicts the routing list
+     undermines both.
 
-3. **references/mechanics.md** — only if you learned something concrete
-   about the new/changed model's behavior while testing (see below). Don't
-   speculate here; every claim in that file is written as "verified on
-   <date>" for a reason — someone will trust it literally.
+4. **`references/mechanics.md`** — only when you verified something concrete.
+   Every claim there is dated for a reason; someone will trust it literally.
 
-4. **evals/evals.json** — add a prompt when the *routing preference*
-   changed (not the profile list). A good one names the task shape and the
-   constraint that should drive the choice (cost, quota, task difficulty),
-   and its `expected_output` states which profile should win and why — see
-   the existing entries for the pattern.
+5. **`evals/evals.json`** — add a prompt when the routing *preference*
+   changed. A good one names the task shape and the constraint that should
+   drive the choice, and its `expected_output` states which profile should win
+   and why.
 
 ## Smoke-test before calling it done
 
-A profile that parses correctly can still fail at runtime — wrong model id,
-wrong trust dir, a model that narrates a tool call it never made. Launch one
-real agent against a disposable repo and confirm the diff actually lands:
+A profile that verifies can still fail at runtime — a model that narrates a
+tool call it never made, or one that can't hold a multi-step edit together.
+Launch one real agent against a disposable repo and confirm the diff lands:
 
 ```bash
 D=$(mktemp -d)
-cd "$D" && git init -q && git commit -q --allow-empty -m init
-echo hello > README.md && git add README.md && git commit -q -m readme
+git -C "$D" init -q && echo hello > "$D/README.md"
+git -C "$D" add -A && git -C "$D" -c user.email=t@t -c user.name=t commit -q -m init
 
-CCS_FLEET_HOME="$D/.fleet" ~/Development/skills/ccs-fleet/scripts/ccs-fleet.sh \
-  launch --task smoke --profile <new-or-changed-profile> --repo "$D" \
+export CCS_FLEET_HOME="$D/.fleet"
+$F launch --task smoke --profile <new-or-changed-profile> --repo "$D" \
   --prompt "Append the line 'smoke-test-ok' to README.md using your file-editing tool, then confirm you saved it."
 
-# poll: agy runs finish in ~10-20s, ccs-backed profiles can take longer
-CCS_FLEET_HOME="$D/.fleet" ~/Development/skills/ccs-fleet/scripts/ccs-fleet.sh status --repo "$D"
-CCS_FLEET_HOME="$D/.fleet" ~/Development/skills/ccs-fleet/scripts/ccs-fleet.sh diff smoke   # run from inside $D
+$F status --repo "$D"
+(cd "$D" && $F diff smoke)
 ```
 
-Look for a non-empty diff, not just `status: SUCCESS` — a `done` agent with
-`0 file(s)` changed means it talked about editing without doing it (verified
-behavior on `agy-oss`, worth checking on any new agy model too). Clean up
-after: `ccs-fleet.sh clean smoke --force`, then `rm -rf "$D"`.
+Look for a non-empty diff, not just exit 0 — a `done` agent with `0 file(s)`
+changed means it talked about editing without doing it. Clean up after:
+`$F clean smoke --force`, then `rm -rf "$D"`.
 
-## Sync and verify
-
-The two directories only match because you make them match. After editing
-the repo copy:
-
-```bash
-rsync -a --delete ~/Development/skills/ccs-fleet/ ~/.claude/skills/ccs-fleet/
-diff -rq ~/Development/skills/ccs-fleet ~/.claude/skills/ccs-fleet && echo "in sync"
-```
-
-Do this last, after the smoke test passes against the repo copy — no point
-syncing a config you're about to revise again.
+If the change was a *routing preference* rather than a new profile, the
+smoke test proves nothing; run the eval suite instead.
 
 ## Reporting back
 
-Tell the user, concretely: which file(s) changed and why, what the new
-routing guidance says to reach for and what it now avoids, and what the
-smoke test showed (profile, model id, and that a real diff landed — not just
-an exit code). If you skipped the smoke test because the change was
-prose-only (no script edit, no new profile), say so rather than silently
-omitting it.
+Tell the user, concretely: which files changed and why, what the routing now
+says to reach for first and what it now avoids, and what `verify` plus the
+smoke test actually showed — profile, model id, and that a real diff landed,
+not just an exit code. If you skipped the smoke test because the change was
+prose-only, say so rather than silently omitting it.
