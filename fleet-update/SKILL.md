@@ -150,7 +150,18 @@ changed means it talked about editing without doing it. Clean up after:
 `$F clean smoke --force`, then `rm -rf "$D"`.
 
 If the change was a *routing preference* rather than a new profile, the
-smoke test proves nothing; run the eval suite instead.
+smoke test proves nothing; run `evals/evals.json` instead — those prompts
+exist to catch a routing preference being silently undone.
+
+If you touched the frontmatter `description`, re-run `evals/trigger-evals.json`
+as well, and read that file's `_readme` first: skill-creator's
+`scripts/run_eval.py` **cannot score this skill**. It installs a throwaway copy
+of the description as `fleet-skill-<uuid>` and counts only that name, so with
+the real `fleet` skill installed Claude invokes `fleet` and every true positive
+reads as a miss. Count `Skill(skill="fleet")` anywhere in the transcript
+instead. `scripts/quick_validate.py <skill-path>` is worth running either way —
+it catches an over-long description (1024 char limit) and angle brackets, both
+of which this skill has tripped over.
 
 ## Reporting back
 

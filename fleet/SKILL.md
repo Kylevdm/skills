@@ -1,23 +1,20 @@
 ---
 name: fleet
 description: >-
-  Deploy coding agents through the CCS CLI (`ccs <profile> -p`) and the
-  Antigravity CLI (`agy <profile> -p`), each isolated in its own git worktree
-  and branch. Profiles: `oc-smart`/`oc-fast` (opencode Zen go subscription —
-  DeepSeek V4 Pro and Flash), `oc-free` (free-tier, throwaway work only),
-  `deepseek` (DeepSeek's own API, the overflow once the subscription's
-  monthly cap is hit), and `agy-gemini`/`agy-opus` (Antigravity — Gemini 3.1
-  Pro for research, Claude Opus 4.6 as the frontier escape hatch, on a
-  tighter quota). Use this skill whenever the user wants work handed to
-  another model rather than done here — "use ccs", "use agy"/"antigravity",
-  "use opencode/zen", "deploy/spin up agents", "delegate this", "farm this
-  out", "fan these out", "run these in parallel", "get
-  deepseek/gemini/opus to do it" — and whenever they list several
-  independent chores at once, since that is the case parallel agents exist
-  for. Also use it to check on, resume, review, land, or clean
-  up agents already launched. Prefer this over hand-rolled `ccs`/`agy` calls:
-  both write files unattended with no permission prompt, and this skill is
-  what keeps that contained.
+  Deploy coding agents through the CCS CLI (`ccs`) and Antigravity CLI
+  (`agy`), each isolated in its own git worktree and branch. Profiles:
+  `oc-smart`/`oc-fast` (opencode Zen go — DeepSeek V4 Pro/Flash), `oc-free`
+  (free-tier, throwaway only), `deepseek` (the overflow once the monthly cap
+  is hit), and `agy-gemini`/`agy-opus` (Gemini 3.1 Pro for research, Claude
+  Opus 4.6 as the frontier escape hatch). Use this whenever the user wants
+  work handed to another model rather than done here — "use ccs", "use
+  agy"/"antigravity", "use opencode/zen", "deploy/spin up agents", "delegate
+  this", "farm this out", "fan these out", "run these in parallel", "get
+  deepseek/gemini/opus to do it" — and whenever they list several independent
+  chores at once, since that is the case parallel agents exist for. Also use
+  it to check on, resume, review, land, or clean up agents already launched.
+  Prefer this over hand-rolled `ccs`/`agy` calls: both write files unattended
+  with no permission prompt, and this skill is what keeps that contained.
 ---
 
 # CCS Fleet
