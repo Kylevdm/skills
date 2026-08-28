@@ -1,5 +1,5 @@
 ---
-name: ccs-fleet
+name: fleet
 description: >-
   Deploy coding agents through the CCS CLI (`ccs <profile> -p`) and the
   Antigravity CLI (`agy <profile> -p`), each isolated in its own git worktree
@@ -36,7 +36,7 @@ stays here.
 Everything runs through the bundled script:
 
 ```
-scripts/ccs-fleet.sh
+scripts/fleet.sh
 ```
 
 Use it rather than calling `ccs`/`agy` directly. A bare `ccs <profile> -p
@@ -163,7 +163,7 @@ Verify with: pytest tests/test_config.py
 Do not modify src/config.py itself, and do not touch any other test file.
 BRIEF
 
-scripts/ccs-fleet.sh launch --task parser-tests \
+scripts/fleet.sh launch --task parser-tests \
   --profile oc-fast --prompt-file /tmp/brief-parser-tests.md
 ```
 
@@ -174,7 +174,7 @@ that started it, so launching several in a row *is* the parallelism. Give each a
 distinct slug.
 
 ```bash
-F=~/.claude/skills/ccs-fleet/scripts/ccs-fleet.sh
+F=~/.claude/skills/fleet/scripts/fleet.sh
 
 $F launch --task parser-tests  --profile oc-fast  --prompt-file /tmp/a.md
 $F launch --task doc-typos     --profile oc-fast  --prompt-file /tmp/b.md

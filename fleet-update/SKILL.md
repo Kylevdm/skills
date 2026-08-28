@@ -1,22 +1,22 @@
 ---
-name: ccs-fleet-update
+name: fleet-update
 description: >-
-  Update the ccs-fleet skill itself — add, remove, or rename a `ccs`/`agy`
+  Update the fleet skill itself — add, remove, or rename a `ccs`/`agy`
   profile, change which model a profile defaults to, repoint a profile at a
   different endpoint, or rebalance the routing order when pricing/quota
   changes (e.g. "the oc-free model id is dead again", "add a profile for the
   new opencode model", "we hit the monthly cap, make deepseek the default",
   "grok is available again", "the routing list is out of date"). Use this
-  whenever the user wants the ccs-fleet skill's config changed rather than
+  whenever the user wants the fleet skill's config changed rather than
   run — this is the maintenance skill for that skill. Always use this instead
-  of hand-editing ccs-fleet's files directly: it keeps the profile table, the
+  of hand-editing fleet's files directly: it keeps the profile table, the
   routing prose, mechanics.md, and the evals in sync, and it starts by
   probing the live endpoints so a change is never made against a guess.
 ---
 
 # CCS Fleet Update
 
-Keep the [ccs-fleet](../ccs-fleet/SKILL.md) skill's profile/model config
+Keep the [fleet](../fleet/SKILL.md) skill's profile/model config
 current. That skill routes work to `ccs` and `agy` backends; this skill is
 how you change *what* it routes to, safely and completely.
 
@@ -27,7 +27,7 @@ within days, and its Anthropic-format support is per-model and server-side.
 So the first move on any change is always:
 
 ```bash
-F=~/.claude/skills/ccs-fleet/scripts/ccs-fleet.sh
+F=~/.claude/skills/fleet/scripts/fleet.sh
 $F verify                        # every profile: live probe + config drift
 agy models                       # agy's current ids and display names (agy profiles only)
 ccs api list                     # which ccs profiles are registered at all
@@ -60,14 +60,14 @@ profile needs `CCS_DROID_PROVIDER: generic-chat-completion-api` — see
 Check before assuming, because this differs per machine:
 
 ```bash
-readlink -f ~/.claude/skills/ccs-fleet
+readlink -f ~/.claude/skills/fleet
 ```
 
-On this machine `~/.claude/skills/ccs-fleet` is a **symlink** to
-`~/Development/skills/ccs-fleet`, so the repo copy *is* the installed copy and
+On this machine `~/.claude/skills/fleet` is a **symlink** to
+`~/Development/skills/fleet`, so the repo copy *is* the installed copy and
 there is nothing to sync. If `readlink -f` ever comes back as a real directory
 of its own, the two are independent copies and every edit needs an
-`rsync -a --delete ~/Development/skills/ccs-fleet/ ~/.claude/skills/ccs-fleet/`
+`rsync -a --delete ~/Development/skills/fleet/ ~/.claude/skills/fleet/`
 afterwards, plus a `diff -rq` to confirm. Do not run that rsync blind — onto a
 symlink it is a no-op at best.
 
@@ -75,7 +75,7 @@ Four files make up the config surface:
 
 | File | What lives there |
 |---|---|
-| `scripts/ccs-fleet.sh` | `fleet_profiles()` — the one table of name/tool/endpoint/model/transport that `launch`, `verify`, and `provision` all read — plus the usage text at the bottom |
+| `scripts/fleet.sh` | `fleet_profiles()` — the one table of name/tool/endpoint/model/transport that `launch`, `verify`, and `provision` all read — plus the usage text at the bottom |
 | `SKILL.md` | frontmatter description (profile list + keywords), intro, the numbered routing list, the example commands |
 | `references/mechanics.md` | verified endpoint and CLI behaviour — only touch when you have *verified* something new, not for routing preference changes |
 | `evals/evals.json` | regression prompts; add one when a routing *preference* changes, so a future edit can't silently undo it |

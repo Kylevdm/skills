@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ccs-fleet: launch, track, and land isolated CCS coding agents.
+# fleet: launch, track, and land isolated CCS/agy coding agents.
 #
 # Each agent runs `ccs <profile> -p <brief>` inside its own git worktree on its
 # own branch, so an agent that writes files unattended (which is what CCS does
@@ -14,7 +14,7 @@ FLEET_HOME="${CCS_FLEET_HOME:-$HOME/.ccs/fleet}"
 DEFAULT_TIMEOUT="${CCS_FLEET_TIMEOUT:-1800}"
 PREFLIGHT_TIMEOUT="${CCS_FLEET_PREFLIGHT_TIMEOUT:-20}"
 
-die() { printf 'ccs-fleet: %s\n' "$*" >&2; exit 1; }
+die() { printf 'fleet: %s\n' "$*" >&2; exit 1; }
 
 # --- helpers ---------------------------------------------------------------
 
@@ -131,7 +131,7 @@ req = urllib.request.Request(
              # `Python-urllib/3.x` agent with `error code: 1010` — a bot-signature
              # block that looks exactly like a dead profile if you don't know it.
              # Any honest agent string is accepted.
-             "user-agent": "ccs-fleet-preflight/1"})
+             "user-agent": "fleet-preflight/1"})
 
 
 def upstream_error(body):
@@ -279,9 +279,9 @@ cmd_launch() {
   local dir wt branch base_sha sid
   dir=$(slug_dir "$slug"); wt="$dir/worktree"; branch="ccs/$slug"
 
-  [ -e "$wt" ] && die "launch: '$slug' already exists ($wt). Use a new slug, or: ccs-fleet.sh clean $slug"
+  [ -e "$wt" ] && die "launch: '$slug' already exists ($wt). Use a new slug, or: fleet.sh clean $slug"
   git -C "$REPO" show-ref --verify --quiet "refs/heads/$branch" \
-    && die "launch: branch '$branch' already exists. Use a new slug, or: ccs-fleet.sh clean $slug"
+    && die "launch: branch '$branch' already exists. Use a new slug, or: fleet.sh clean $slug"
 
   base=${base:-HEAD}
   base_sha=$(git -C "$REPO" rev-parse "$base") || die "launch: cannot resolve base ref '$base'"
@@ -477,7 +477,7 @@ require_slug() {
   [ -n "${1:-}" ] || die "$2: needs a task slug"
   REPO=$(repo_root .)
   DIR=$(slug_dir "$1")
-  [ -f "$DIR/meta.json" ] || die "$2: no agent named '$1' (see: ccs-fleet.sh status)"
+  [ -f "$DIR/meta.json" ] || die "$2: no agent named '$1' (see: fleet.sh status)"
 }
 
 cmd_log()  { require_slug "${1:-}" log;  cat "$DIR/run.log" 2>/dev/null || echo "(no output yet)"; }
@@ -515,7 +515,7 @@ cmd_resume() {
     [ -n "$model" ] && argv+=(--model "$model")
     argv+=(--resume "$sid" -p "$prompt")
   else
-    [ -n "$sid" ] || die "resume: no conversation id recorded for '$slug' yet — check: ccs-fleet.sh log $slug"
+    [ -n "$sid" ] || die "resume: no conversation id recorded for '$slug' yet — check: fleet.sh log $slug"
     argv=(agy --model "$model" --dangerously-skip-permissions \
       --add-dir "$wt" --conversation "$sid" --output-format json -p "$prompt")
   fi
@@ -585,7 +585,7 @@ stage_and_commit() {
     printf 'skipped as build artifacts (add to .gitignore or CCS_FLEET_EXCLUDES_FILE if wrong):\n'
     printf '  %s\n' $skipped; }
 
-  git -C "$wt" -c commit.gpgsign=false commit -q -m "$(printf 'ccs-fleet(%s): %s\n\nDelegated via %s profile %s.\n' \
+  git -C "$wt" -c commit.gpgsign=false commit -q -m "$(printf 'fleet(%s): %s\n\nDelegated via %s profile %s.\n' \
     "$slug" "$(head -c 120 "$dir/brief.md" | tr '\n' ' ')" \
     "$(meta_get "$dir" tool)" "$(meta_get "$dir" profile)")"
 }
@@ -638,11 +638,11 @@ cmd_land() {
   stage_and_commit "$DIR" "$wt" "$1" || true
 
   if [ -z "$(git -C "$REPO" log --oneline "$(meta_get "$DIR" base_sha)".."$branch" 2>/dev/null)" ]; then
-    die "land: '$1' has no commits — the agent produced nothing to merge (check: ccs-fleet.sh log $1)"
+    die "land: '$1' has no commits — the agent produced nothing to merge (check: fleet.sh log $1)"
   fi
 
   [ -n "$(git -C "$REPO" status --porcelain)" ] \
-    && die "land: your working tree is dirty. Commit or stash first, then: ccs-fleet.sh land $1"
+    && die "land: your working tree is dirty. Commit or stash first, then: fleet.sh land $1"
 
   git -C "$REPO" merge --no-ff "$branch" \
     || die "land: merge hit conflicts. Resolve in $REPO, then commit."
@@ -675,7 +675,7 @@ case "${1:-}" in
   verify) shift; cmd_verify "$@" ;;
   provision) shift; cmd_provision "$@" ;;
   *) cat <<'USAGE'
-ccs-fleet.sh — isolated CCS/agy coding agents, one git worktree each
+fleet.sh — isolated CCS/agy coding agents, one git worktree each
 
   launch --task <slug> --profile <profile> [--model <m>]
          (--prompt <text> | --prompt-file <path>) [--base <ref>] [--repo <path>]

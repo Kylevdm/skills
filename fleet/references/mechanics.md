@@ -189,7 +189,7 @@ and the API key through third-party infrastructure.
 `opencode.ai` sits behind Cloudflare, which answers `Python-urllib/3.x` with
 **HTTP 403 `error code: 1010`** — a bot-signature block. It looks exactly
 like a dead profile. Any honest agent string is accepted; the preflight sends
-`ccs-fleet-preflight/1`. Worth knowing before concluding a key is bad.
+`fleet-preflight/1`. Worth knowing before concluding a key is bad.
 
 ## Verified command surface
 
