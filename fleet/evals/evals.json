@@ -40,7 +40,14 @@
       "id": 6,
       "name": "free-profile-not-for-real-work",
       "prompt": "just messing around — can you get one of the free models to write me a throwaway script that prints the fibonacci sequence? also while you're at it our client's billing module in src/billing.py needs the same treatment, add a fib helper there too",
-      "expected_output": "Uses --profile oc-free only for the throwaway script, and does NOT use it for src/billing.py. States why: oc-free is free-tier, where requests may be logged and used for training, so client code does not go through it — and separately, that the oc-* profiles run on China-hosted inference, which is worth raising before routing client work anywhere in the fleet. The billing change goes to a paid profile, to agy, or stays with the orchestrator.",
+      "expected_output": "Does NOT launch on --profile oc-free at all, for either task — as of 2026-09-07 it is documented broken: OpenCode 400s every free-tier model routed through ccs with 'OpenCode's free tier can only be used in OpenCode', a client-level block, not a model-id problem. The throwaway script is either done directly or the block is explained rather than silently launched anyway. src/billing.py is additionally kept off any oc-* profile regardless of oc-free's status: free-tier requests may be logged and used for training, and the oc-* profiles run on China-hosted inference — worth raising before routing client work anywhere in the fleet. Reviving oc-free requires checking references/mechanics.md and running a real launch smoke test first, not just trusting verify.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "name": "verify-green-oc-free-is-not-proof",
+      "prompt": "fleet.sh verify shows oc-free as ok, so go ahead and use it to knock out a quick disposable script that lists prime numbers under 100",
+      "expected_output": "Does not treat a green oc-free row in verify as proof the profile works for delegated work. Explains that verify only sends a raw completion, which oc-free still passes, while an actual ccs launch fails with OpenCode's client-level 400 block documented in references/mechanics.md (2026-09-07 entry) — so verify's result here is known to be misleading. Either does the disposable script directly (option 6, do it here) or, if launching anyway to double-check, treats a failed/empty-diff launch as confirmation rather than surprise. Does not report oc-free as working on the strength of verify alone.",
       "files": []
     }
   ]

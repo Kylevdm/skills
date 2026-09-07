@@ -138,6 +138,35 @@ whichever id `oc-free` names as disposable: `verify` tells you when it dies,
 `--model <other-free-id>` swaps it for one run, and the profile table in the
 script is where a lasting swap goes.
 
+### `oc-free` is currently blocked for any non-OpenCode client (2026-09-07)
+
+`hy3-free` had fully left the catalog (not merely failing — absent from
+`GET /v1/models`) by 2026-09-07. Re-probed the live free ids directly against
+`opencode.ai/zen`: `mimo-v2.5-free`, `ling-3.0-flash-fin-free`,
+`nemotron-3-ultra-free`, and `nemotron-3.5-lightning-free` all returned clean
+200s over raw `curl` — `deepseek-v4-flash-free` and both `muse-spark-*`
+variants 500'd. `nemotron-3-ultra-free` went into the table as the new
+default: it was the only one that finished within the 24-token probe
+(`finish_reason: stop`) rather than burning the whole budget on unfinished
+reasoning preamble.
+
+That raw-API health is misleading. A real `ccs launch` smoke test against
+`oc-free`, tried with both `nemotron-3-ultra-free` and `mimo-v2.5-free`,
+failed every time with `API Error: 400 Error from provider (Console):
+OpenCode's free tier can only be used in OpenCode` — using the exact same
+token that had just answered fine over `curl`. So the block is keyed off
+something `ccs`'s request carries that a bare `curl` doesn't (almost
+certainly the client identification opencode's server checks for), not the
+model id, and it is universal across the free tier, not per-model.
+
+Consequence: `verify`'s raw-completion probe cannot see this failure mode at
+all — it will keep reporting `oc-free` healthy. The only way to know it is
+broken is an actual `launch`. Do not "fix" this by hunting for yet another
+free id; there isn't one that will pass, since the block isn't about the
+model. Revisit only if a future probe shows a `ccs`-delegated `launch`
+actually landing a diff on `oc-free` again — check that before reverting
+SKILL.md's routing item 7 back to a live recommendation.
+
 ### `ccs` has a built-in Anthropic→OpenAI proxy, and starts it itself
 
 `ccs proxy start <profile>` runs a local daemon that accepts Anthropic
@@ -190,6 +219,19 @@ and the API key through third-party infrastructure.
 **HTTP 403 `error code: 1010`** — a bot-signature block. It looks exactly
 like a dead profile. Any honest agent string is accepted; the preflight sends
 `fleet-preflight/1`. Worth knowing before concluding a key is bad.
+
+### Every request needs an `x-opencode-session` header
+
+OpenCode Go emailed 2026-09 that requests missing `x-opencode-session` can't
+be routed/optimised on their end, and named `curl` and
+`ccs-fleet-preflight/1` (the preflight's pre-rename user-agent) as the two
+offenders. Real `ccs`-launched agents pass `claude`'s `--session-id` through
+and were not named, so this only affected the two ad hoc paths that talk to
+the endpoint directly: `probe_endpoint()` in `scripts/fleet.sh` and the manual
+model-probe `curl` in `fleet-update/SKILL.md`. Both now send a fresh
+`uuid.uuid4()` as the session id per call, since a probe is a one-off, not
+part of a coding session. Any future code that hits `opencode.ai` directly
+(rather than through `ccs`) needs this header too.
 
 ## Verified command surface
 

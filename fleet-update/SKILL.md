@@ -47,6 +47,7 @@ models, and a model that answers `/chat/completions` fine will 500 on
 K=$(python3 -c 'import json;print(json.load(open("'"$HOME"'/.ccs/oc-fast.settings.json"))["env"]["ANTHROPIC_API_KEY"])')
 curl -s -m 30 -H "x-api-key: $K" -H "content-type: application/json" \
   -H "anthropic-version: 2023-06-01" \
+  -H "x-opencode-session: $(python3 -c 'import uuid;print(uuid.uuid4())')" \
   -d '{"model":"<id>","max_tokens":24,"messages":[{"role":"user","content":"say ok"}]}' \
   https://opencode.ai/zen/go/v1/messages
 ```

@@ -4,7 +4,8 @@ description: >-
   Deploy coding agents through the CCS CLI (`ccs`) and Antigravity CLI
   (`agy`), each isolated in its own git worktree and branch. Profiles:
   `oc-smart`/`oc-fast` (opencode Zen go — DeepSeek V4 Pro/Flash), `oc-free`
-  (free-tier, throwaway only), `deepseek` (the overflow once the monthly cap
+  (free-tier, currently blocked by OpenCode for non-OpenCode clients),
+  `deepseek` (the overflow once the monthly cap
   is hit), and `agy-gemini`/`agy-opus` (Gemini 3.1 Pro for research, Claude
   Opus 4.6 as the frontier escape hatch). Use this whenever the user wants
   work handed to another model rather than done here — "use ccs", "use
@@ -48,7 +49,8 @@ a worktree at all.
 
 ## The `oc-*` profiles route code to China-hosted inference
 
-`oc-fast`, `oc-smart`, and `oc-free` all run on models served from China —
+`oc-fast`, `oc-smart`, and `oc-free` (currently blocked, see routing item 7)
+all run on models served from China —
 reaching them required enabling opencode's China-hosting opt-in on the
 workspace. That is a data-residency question, not a performance one. Raise it
 before sending client code, proprietary source, or anything under a
@@ -102,10 +104,15 @@ Work down this list and stop at the first line that fits. Say in one clause why.
 6. **Not worth the overhead of orchestrating, or `agy` is absent and the task
    needed it** → do it here yourself. A one-line fix costs more to brief,
    poll, and review than to make.
-7. **Playing, throwaway, or genuinely disposable output** → `--profile
-   oc-free`. Free-tier models: the id rots constantly, quality is low, and
-   **free-tier requests may be logged and used for training**. Never send real
-   work, proprietary code, or anything confidential through it.
+7. **`oc-free` — currently broken, do not route here.** Verified 2026-09-07:
+   every free-tier model now 400s through `ccs` with `"OpenCode's free tier
+   can only be used in OpenCode"`, even though the same token succeeds via a
+   raw API call — OpenCode blocking non-OpenCode clients from the free tier,
+   not a dead model id. `verify` still reports it healthy because that check
+   is a raw completion, not a `ccs`-delegated one — don't trust a green
+   `oc-free` row without an actual `launch` smoke test. Route disposable work
+   to option 6 (do it here) until this clears; check `references/mechanics.md`
+   before reviving this profile.
 
 There is deliberately no tier between `oc-smart` and `agy-opus`. A Qwen 3.8
 Max tier was built and then removed: on a hard nested-config refactor both it
@@ -230,8 +237,11 @@ $F verify              # probe every profile; or: $F verify oc-smart
 Each profile gets a real 24-token completion and reports the provider's own
 error, plus any drift between the live config and what the fleet expects. This
 is the first thing to run when a launch is refused or an agent fails oddly —
-it is also what catches `oc-free`'s model id rotting away, which happens often.
-`--model <another-free-id>` works around that for one run.
+it is also what catches `oc-free`'s model id rotting away, which happens often
+— though not the client-level block documented in routing item 7: that only
+shows up on an actual `launch`, since `verify` never gets that far.
+`--model <another-free-id>` works around a dead id for one run, but not that
+block.
 
 The launch preflight uses the same probe, so a dead profile costs about a
 second and names its own cause: `CreditsError: Insufficient balance` means the

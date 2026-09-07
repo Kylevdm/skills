@@ -57,7 +57,7 @@ fleet_profiles() {
   cat <<'PROFILES'
 oc-fast|ccs|https://opencode.ai/zen/go|deepseek-v4-flash|anthropic
 oc-smart|ccs|https://opencode.ai/zen/go|deepseek-v4-pro|anthropic
-oc-free|ccs|https://opencode.ai/zen|hy3-free|generic-chat-completion-api
+oc-free|ccs|https://opencode.ai/zen|nemotron-3-ultra-free|generic-chat-completion-api
 deepseek|ccs|https://api.deepseek.com/anthropic|deepseek-v4-pro[1m]|anthropic
 agy-gemini|agy|-|gemini-3.1-pro-high|-
 agy-opus|agy|-|claude-opus-4-6-thinking|-
@@ -112,7 +112,7 @@ print(env.get(sys.argv[2], ""))' "$HOME/.ccs/$1.settings.json" "$2" 2>/dev/null
 probe_endpoint() {
   # probe_endpoint <base-url> <key> <model> <anthropic|openai>
   python3 - "$1" "$2" "$3" "$4" "$PREFLIGHT_TIMEOUT" <<'PY'
-import json, sys, urllib.error, urllib.request
+import json, sys, urllib.error, urllib.request, uuid
 
 base, key, model, fmt, timeout = sys.argv[1:6]
 base = base.rstrip("/")
@@ -131,7 +131,11 @@ req = urllib.request.Request(
              # `Python-urllib/3.x` agent with `error code: 1010` — a bot-signature
              # block that looks exactly like a dead profile if you don't know it.
              # Any honest agent string is accepted.
-             "user-agent": "fleet-preflight/1"})
+             "user-agent": "fleet-preflight/1",
+             # opencode.ai wants every request tagged with a session id for
+             # its own routing/optimisation; a probe is a one-off, not part
+             # of a coding session, so it gets a fresh id of its own.
+             "x-opencode-session": str(uuid.uuid4())})
 
 
 def upstream_error(body):
@@ -682,7 +686,7 @@ fleet.sh — isolated CCS/agy coding agents, one git worktree each
          [--no-preflight]
          profiles: oc-smart   deepseek-v4-pro    default coding reach
                    oc-fast    deepseek-v4-flash  cheapest, mechanical edits
-                   oc-free    hy3-free           throwaway; id rots, check verify
+                   oc-free    nemotron-3-ultra-free  BROKEN: opencode blocks free tier via ccs (see mechanics.md)
                    deepseek   deepseek-v4-pro[1m]  overflow once go's cap is hit
                    agy-gemini gemini-3.1-pro-high   research, not coding
                    agy-opus   claude-opus-4-6-thinking  frontier escape hatch
