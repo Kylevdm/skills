@@ -1,0 +1,42 @@
+{
+  "_readme": [
+    "Trigger evals: does the SKILL.md description fire on the right prompts?",
+    "Run these against a fixture repo that actually contains src/config.py,",
+    "src/calc.py, tests/test_loader.py and a README with typos — several",
+    "queries name those paths, and in a repo without them the agent",
+    "correctly refuses the task instead of routing it, which scores as a",
+    "miss for the wrong reason.",
+    "Note that skill-creator's scripts/run_eval.py cannot score this skill:",
+    "it installs a throwaway copy of the description as `fleet-skill-<uuid>`",
+    "and counts only that name, so when the real `fleet` skill is installed",
+    "Claude invokes `fleet` and every true positive reads as a miss.",
+    "Count Skill(skill=\"fleet\") anywhere in the transcript instead — and",
+    "scan the whole transcript, since Claude often reads a file to orient",
+    "itself before invoking the skill.",
+    "Last measured 2026-08-28: 13/15, with all 6 negatives clean.",
+    "The two known misses are recorded below rather than deleted."
+  ],
+  "evals": [
+    {"query": "use ccs to write the tests for the config parser", "should_trigger": true},
+    {"query": "spin up a few agents to knock out these chores: fix the typos in README.md, add a sub(a,b) to src/calc.py, and write tests for parse_config", "should_trigger": true},
+    {"query": "can you delegate this refactor to another model? i don't want to burn quota in this session", "should_trigger": true},
+    {"query": "farm this out to deepseek", "should_trigger": true},
+    {"query": "fan these three out in parallel please", "should_trigger": true},
+    {"query": "use antigravity for this one", "should_trigger": true},
+    {"query": "get opencode zen to take a pass at the parser rewrite", "should_trigger": true},
+    {"query": "check on the ccs agents you launched earlier and show me their diffs", "should_trigger": true},
+    {"query": "any of the delegated agents finished yet? land the ones that look right", "should_trigger": true},
+
+    {"query": "i've got four unrelated chores in this repo and i don't want to do any of them myself", "should_trigger": true,
+     "known_miss": "Names no chores, so Claude asks which four rather than routing. Triggers once they are actually listed."},
+    {"query": "how are the agents you launched earlier doing? show me the diffs", "should_trigger": true,
+     "known_miss": "Bare 'agents' is ambiguous with Claude Code's own subagents. Adding any backend cue ('ccs agents', 'delegated agents') triggers reliably."},
+
+    {"query": "what does parse_config do in src/config.py?", "should_trigger": false},
+    {"query": "fix the typo in the second line of README.md", "should_trigger": false},
+    {"query": "run the test suite and tell me which tests fail", "should_trigger": false},
+    {"query": "add a docstring to the parse_config function", "should_trigger": false},
+    {"query": "why is this regex not matching multiline input?", "should_trigger": false},
+    {"query": "commit what's staged with a sensible message", "should_trigger": false}
+  ]
+}
