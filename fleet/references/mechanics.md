@@ -1,438 +1,221 @@
-# CCS/agy mechanics and failure modes
+# Pi / opencode go mechanics and failure modes
 
-Verified against CCS CLI v8.9.0 and `agy` v1.1.22, on 2026-08-18 and
-2026-08-28. Read this when an agent fails, when `status` reports something
-unexpected, or before changing the script.
+Harness verified against Pi CLI v0.85.1, 2026-09-08 (research pass plus a
+live smoke test through `scripts/fleet.sh`). Endpoint facts below carry
+forward from the ccs era, where they were verified directly against
+opencode's API; re-check them if `verify` starts disagreeing with this file.
+Read this when an agent fails, when `status` reports something unexpected,
+or before changing the script.
 
 ## opencode: `/zen` and `/zen/go` are different products
 
 The single most expensive thing to not know about this fleet.
 
-| Endpoint | What it is | State (2026-08-28) |
+| Endpoint | What it is | State (2026-08-28, last checked) |
 |---|---|---|
 | `https://opencode.ai/zen/go/v1` | the $10/mo **subscription**, 33-model catalog | live, serving |
 | `https://opencode.ai/zen/v1` | pay-as-you-go Zen, 64-model catalog | authenticates fine, `CreditsError` on every paid model — the workspace balance is $0 |
 | `https://opencode.ai/go/v1` | nothing; returns the marketing site's HTML | — |
 
-Both accept the same key, via either `x-api-key` or `Authorization: Bearer`.
-
-All four `oc-*` profiles were originally pointed at the PAYG path, so every
-request came back HTTP 401 `CreditsError: Insufficient balance`. Claude Code's
-SDK maps 401 to `authentication_failed` and retries it ten times behind
-exponential backoff, so what the user saw was a **118-second hang ending in a
-generic auth error** — the actual message, which names its own fix, never
-surfaced. One wrong path segment, an entire debugging session, and a
-near-miss architectural rewrite. `verify` and the launch preflight exist
-because of this: both ask for 24 real tokens and print the upstream's own
-`error.message` in under a second.
-
-A `/v1/models` listing would **not** have caught it. The unfunded endpoint
-answers that with a clean 200. Only generation fails, so only generation is a
-real probe.
+Pi's built-in `opencode-go` provider (`packages/ai/src/providers/opencode-go.ts`
+in Pi's source) is pointed at the subscription path, `https://opencode.ai/zen/go`
+— the same path the fleet's profiles route to. There is also a plain
+`opencode` provider in Pi pointed at the unfunded PAYG `/zen` path; the fleet
+does not use it. If a profile is ever pointed at it by mistake, expect the
+same `CreditsError` the ccs era hit.
 
 ### The subscription: what it costs and where it runs
 
-$10/month, flat, with a **$60 monthly usage cap** measured at the models' own
-list prices. Per Mtok, from `~/.ccs/models-dev-registry-cache.json`:
-`deepseek-v4-flash` 0.14/0.28 · `deepseek-v4-pro` 0.44–1.74/0.87–3.48 ·
-`kimi-k3` 3/15. None of these bill the wallet directly — they decide **how
-fast the cap burns**, and `kimi-k3` burns it 4–8× faster than
-`deepseek-v4-pro`. The `deepseek` profile is a separate PAYG account and is
-scoped as the overflow for when the cap does run out.
+$10/month, flat, with a **$60 monthly usage cap shared across every model in
+the go catalog**, measured at each model's own list price — see
+`fleet/CONTEXT.md` and `docs/adr/0002-go-shared-cap-routing.md` for the
+routing consequence. A cheap model stretches the month; an expensive one
+burns it fast. None of the models bill a separate wallet — they only decide
+how fast the shared cap empties.
 
-**DeepSeek on opencode is China-hosted inference.** Serving it required
-enabling opencode's China-hosting opt-in on the workspace (before that, every
-`deepseek-v4-*` call returned `RegionError: requires explicit opt in`); the
-same opt-in is what unlocked `kimi-k3` and both Qwen Max models. So
-`oc-fast`, `oc-smart`, and `oc-free` all route code to China-hosted inference.
-That is a data-residency decision, not a performance one, and it belongs in
-front of anyone routing client work.
+**Models on go are China-hosted inference.** Serving them required enabling
+opencode's China-hosting opt-in on the workspace. That is a data-residency
+decision, not a performance one, and belongs in front of anyone routing
+client work through this fleet.
 
-Zen's BYOK feature accepts only OpenAI and Anthropic keys, so the user's
-DeepSeek key cannot be attached to the opencode workspace. That is why
-`deepseek` stays a separate `ccs` profile rather than folding into Zen.
+### Anthropic-format support no longer matters here
 
-### Anthropic format support is per-model, and mostly absent
+Under the old ccs harness, opencode's Anthropic adapter covered only 6 of 33
+go models server-side, which is why `glm-*` and `kimi-k2.7-code` used to
+500 and were unroutable. **Pi talks to `opencode-go` over `/chat/completions`
+(OpenAI format) natively**, so that restriction doesn't apply to Pi at all —
+every model in the go catalog is reachable, including the ones ccs couldn't
+reach. Keep this in mind if the routing table is ever widened past
+`pi-default`/`pi-plus`/`pi-deepseek`: nothing in the go catalog is
+format-blocked anymore, only unvalidated.
 
-opencode's Anthropic adapter covers **6 of the 33** go models. This is
-server-side; no config fixes it. Verified 2026-08-28 with a 24-token
-`/v1/messages` POST:
-
-| Model | `/v1/messages` | `/chat/completions` |
-|---|---|---|
-| `deepseek-v4-flash`, `deepseek-v4-pro` | ✅ | ✅ |
-| `qwen3.8-max`, `qwen3.7-max` | ✅ | ✅ |
-| `kimi-k3`, `minimax-m3` | ✅ | ✅ |
-| `glm-5.3`, `glm-5.2`, `kimi-k2.7-code` | ❌ 500 | ✅ |
-| `gpt-5.6-luna` | ❌ 500 | ❌ 500 |
-| `grok-4.6` | ❌ `not supported for format anthropic` | ❌ `not supported for format oa-compat` |
-| `deepseek-v4-pro[1m]` | ❌ `ModelError: not supported` | ❌ |
-
-Three consequences the profile set is built around. **`grok-4.6` is
-unavailable in every API format**, so it cannot back any profile. **`[1m]` is
-rejected on go** — the suffix works only against DeepSeek's own API, which is
-why `deepseek` keeps it and no `oc-*` profile has it. And go serves **no
-Claude and no Gemini** (`gpt-5.6-luna` is its only frontier-adjacent model,
-and it 500s), which is why `agy` is not redundant.
-
-go's context window is not published — the catalog exposes no limit metadata —
-but it is roomy. Measured 2026-08-28 on `deepseek-v4-flash`: a prompt with a
-passphrase at the very front followed by ~250k tokens of filler came back with
-the passphrase recalled correctly, no error and no sign of head truncation, at
-100k and 250k alike.
-
-Two caveats keep that from being a long-context *quality* claim. A
-low-entropy haystack is the easiest possible retrieval test, so this shows
-the plumbing carries ~250k tokens, not that reasoning holds up across them.
-And the `usage.input_tokens` figures that come back are not trustworthy — the
-same prompt reported 88, 5,808, and 151,808 across runs, which is prompt
-caching being counted inconsistently rather than the input changing size.
-Don't use them to estimate cap burn. For work that genuinely needs a huge
-window, `deepseek` and its `[1m]` suffix remain the honest answer.
-
-### Measured: Qwen 3.8 Max does not beat DeepSeek V4 Pro here
-
-An `oc-max` tier on `qwen3.8-max` was built and then deleted on the strength
-of an A/B, recorded so nobody rebuilds it on the same reasoning.
-
-Identical brief, identical fixture, two worktrees: extend a flat
-`parse_config()` to support nested `[section]` and dotted `[a.b]` headers with
-full backward compatibility, exact `ValueError` line numbers, and repeated
-sections merging. Graded by a 16-case suite neither agent could see (the
-untouched baseline scores 7/16).
-
-| Profile | Model | Score | Duration | Diff |
-|---|---|---|---|---|
-| `oc-smart` | `deepseek-v4-pro` | **16/16** | 188s, 8 turns | +22/-4 |
-| `oc-max` | `qwen3.8-max` | **16/16** | 365s, 1.9× slower | +32/-4 |
-
-Both stayed in scope. Qwen matched on correctness and lost on everything
-else, while burning the cap faster — so there is nothing between `oc-smart`
-and `agy-opus`, and hard reasoning is not by itself a reason to escalate.
-This matches the grill-time ordering, which put Qwen Max at or below DeepSeek
-V4 Pro; with `grok-4.6` unavailable in every format, nothing in go's catalog
-clearly beats `deepseek-v4-pro`.
-
-`qwen3.8-max` still works and is still worth `--model qwen3.8-max` on
-`oc-smart` when a second opinion from a different model family is the point.
-One task is one data point; re-run something like this before reinstating a
-tier on it.
-
-### Free models exist only on PAYG, only in OpenAI format
-
-The free ids (`hy3-free`, `mimo-v2.5-free`, `laguna-s-2.1-free`,
-`nemotron-3.5-lightning-free`, …) are in the PAYG catalog and not in go's 33.
-They answer at a $0 balance, but **every one of them 500s on
-`/v1/messages`** — they are reachable only through `/chat/completions`.
-
-That this is server-side rather than a local misconfiguration was confirmed
-by control: a *paid* model on the identical endpoint, key, and headers
-returns a clean, well-formed `CreditsError`. Auth and transport are fine; the
-Anthropic adapter simply does not cover the free models.
-
-**Free ids rot fast.** Verified in one sitting on 2026-08-28: `hy3-free` ✅
-200, `laguna-s-2.1-free` ✅ 200, `mimo-v2.5-free` ❌ 429 `FreeUsageLimitError`,
-`deepseek-v4-flash-free` ❌ 400 "Model is unavailable",
-`ling-3.0-flash-fin-free` ❌ 503, `nemotron-3.5-lightning-free` ❌ 400. Treat
-whichever id `oc-free` names as disposable: `verify` tells you when it dies,
-`--model <other-free-id>` swaps it for one run, and the profile table in the
-script is where a lasting swap goes.
-
-### `oc-free` is currently blocked for any non-OpenCode client (2026-09-07)
-
-`hy3-free` had fully left the catalog (not merely failing — absent from
-`GET /v1/models`) by 2026-09-07. Re-probed the live free ids directly against
-`opencode.ai/zen`: `mimo-v2.5-free`, `ling-3.0-flash-fin-free`,
-`nemotron-3-ultra-free`, and `nemotron-3.5-lightning-free` all returned clean
-200s over raw `curl` — `deepseek-v4-flash-free` and both `muse-spark-*`
-variants 500'd. `nemotron-3-ultra-free` went into the table as the new
-default: it was the only one that finished within the 24-token probe
-(`finish_reason: stop`) rather than burning the whole budget on unfinished
-reasoning preamble.
-
-That raw-API health is misleading. A real `ccs launch` smoke test against
-`oc-free`, tried with both `nemotron-3-ultra-free` and `mimo-v2.5-free`,
-failed every time with `API Error: 400 Error from provider (Console):
-OpenCode's free tier can only be used in OpenCode` — using the exact same
-token that had just answered fine over `curl`. So the block is keyed off
-something `ccs`'s request carries that a bare `curl` doesn't (almost
-certainly the client identification opencode's server checks for), not the
-model id, and it is universal across the free tier, not per-model.
-
-Consequence: `verify`'s raw-completion probe cannot see this failure mode at
-all — it will keep reporting `oc-free` healthy. The only way to know it is
-broken is an actual `launch`. Do not "fix" this by hunting for yet another
-free id; there isn't one that will pass, since the block isn't about the
-model. Revisit only if a future probe shows a `ccs`-delegated `launch`
-actually landing a diff on `oc-free` again — check that before reverting
-SKILL.md's routing item 7 back to a live recommendation.
-
-### `ccs` has a built-in Anthropic→OpenAI proxy, and starts it itself
-
-`ccs proxy start <profile>` runs a local daemon that accepts Anthropic
-`/v1/messages` inbound and calls `chat/completions` upstream — verified by a
-404 on inbound `/chat/completions`, `owned_by: generic-chat-completion-api`
-in its model list, and `ccs proxy activate` emitting
-`export ANTHROPIC_BASE_URL='http://127.0.0.1:<port>'`. Against `glm-5.3`, a
-model that 500s on the native Anthropic path, the translation is production
-quality: tool calls arrive as a valid `tool_use` block with parsed `input`
-JSON and `stop_reason: tool_use`, reasoning maps into `thinking` blocks with
-synthesized signatures, and streaming produces a well-formed Anthropic SSE
-sequence.
-
-**The fleet script does not manage this daemon, and must not start one.**
-`ccs` does it automatically: `settings-flow.js` calls
-`resolveOpenAICompatProfileConfig()` on every profile it launches, and if the
-profile resolves to an OpenAI-compatible provider it calls
-`startOpenAICompatProxy()`, exits 1 with a clear stderr message if that
-fails, and otherwise prints `Using local OpenAI-compatible proxy for "<name>"
-on port <n>`. Verified directly: `ccs proxy stop oc-free`, then a plain
-`ccs oc-free -p ...`, and the daemon comes back under a new PID. So `oc-free`
-is invoked exactly like every other ccs profile.
-
-The switch is **`CCS_DROID_PROVIDER` in the settings file**, and it is
-load-bearing rather than cosmetic:
-
-- `generic-chat-completion-api` (or `openai`) → ccs owns a proxy for this
-  profile and talks OpenAI upstream. This is what makes `oc-free` work at all.
-- anything else, `anthropic` included → ccs goes straight at the upstream's
-  `/v1/messages`.
-
-`ccs api create` writes `generic-chat-completion-api` for any base URL it
-doesn't recognise, opencode's included, so a freshly provisioned `oc-smart`
-would sit behind a proxy it does not need. `provision` corrects the field
-afterwards and `verify` reports it as drift.
-
-The upstream path the proxy calls is derived in `proxy/upstream-url.js`: a
-base that ends in `/v1` or `/api` gets `/chat/completions` appended, anything
-else gets `/v1/chat/completions`. So `https://opencode.ai/zen` resolves to
-`https://opencode.ai/zen/v1/chat/completions`, which is correct.
-
-**Do not deploy the Cloudflare Worker** from
-`github.com/cucoleadan/opencode-cowork-proxy`. It solves exactly the problem
-`ccs proxy` already solves locally, and pays for it by routing every request
-and the API key through third-party infrastructure.
-
-### Cloudflare blocks the default Python user-agent
-
-`opencode.ai` sits behind Cloudflare, which answers `Python-urllib/3.x` with
-**HTTP 403 `error code: 1010`** — a bot-signature block. It looks exactly
-like a dead profile. Any honest agent string is accepted; the preflight sends
-`fleet-preflight/1`. Worth knowing before concluding a key is bad.
-
-### Every request needs an `x-opencode-session` header
-
-OpenCode Go emailed 2026-09 that requests missing `x-opencode-session` can't
-be routed/optimised on their end, and named `curl` and
-`ccs-fleet-preflight/1` (the preflight's pre-rename user-agent) as the two
-offenders. Real `ccs`-launched agents pass `claude`'s `--session-id` through
-and were not named, so this only affected the two ad hoc paths that talk to
-the endpoint directly: `probe_endpoint()` in `scripts/fleet.sh` and the manual
-model-probe `curl` in `fleet-update/SKILL.md`. Both now send a fresh
-`uuid.uuid4()` as the session id per call, since a probe is a one-off, not
-part of a coding session. Any future code that hits `opencode.ai` directly
-(rather than through `ccs`) needs this header too.
-
-## Verified command surface
+## Verified: Pi's headless command surface
 
 ```bash
-ccs <profile> [claude-args...] -p "<prompt>"
+pi -p "<prompt>" --model opencode-go/<model-id> \
+   --session-dir <dir> --name <name>
 ```
-
-`ccs` sets the profile's env (from `~/.ccs/<profile>.settings.json`) and execs a
-headless `claude`. Anything else on the line is passed through to `claude`, so
-the flags that matter are Claude Code's own:
 
 | Flag | Effect | Verified |
 |---|---|---|
-| `-p "<text>"` | Headless run with this prompt | yes |
-| `--model <id>` | Really does switch model, despite the summary table | yes — `--model deepseek-v4-flash` shows `{"model":"deepseek-v4-flash"}` on stderr |
-| `--session-id <uuid>` | Run under a caller-chosen session id | yes |
-| `--resume <uuid>` | Continue that session, from the same cwd | yes |
+| `-p "<text>"` | Print/headless mode: runs once, no TUI, exits when done | yes — used by every `launch`/`resume` |
+| `--model <provider>/<id>` | Model for this run | yes — `opencode-go/minimax-m3` etc. all answered in `verify` |
+| `--session-dir <dir>` | Where this run's session file is written | yes, points sessions at the fleet's own state dir rather than Pi's default `~/.pi/agent/sessions/<cwd>` |
+| `--name <name>` | Names the session within `--session-dir`, for later addressing | used as the slug, so it lines up with the fleet's own naming |
 
-Agents write files unattended in `-p` mode — no permission prompt, no
-confirmation. This is the single most important property of the tool and the
-reason every run gets its own worktree.
+**No TTY needed**: Pi forces print/non-interactive mode whenever stdin or
+stdout isn't a TTY, even without `-p`. That's what makes `pi -p` safe inside
+the script's detached `setsid` subshell.
 
-## `<profile>:continue` no longer exists
+**Exit codes**: `0` on success; `1` when the run ends in an error or is
+aborted; `129`/`143` on SIGHUP/SIGTERM. `timeout` in the launch/resume
+wrapper sends its own SIGTERM on the 30-minute cap and reports `124` itself
+— unrelated to Pi's own exit codes, and `state_of` already treats `124` as
+`timeout` regardless of which side produced it.
 
-`ccs deepseek:continue -p "..."` fails with **error E104** ("profile not
-found") on v8.9.0. The syntax appears in CCS's own bundled `ccs-delegation`
-skill and in `~/.claude/commands/ccs/continue.md`, both of which are stale.
+**No permission prompts, ever.** Pi has no built-in permission system — in
+`-p` mode it reads, writes, and runs bash with the launching user's own
+filesystem access, unconditionally. This is *why* every run gets its own
+worktree, exactly as it was true of ccs: the worktree, not a flag, is the
+safety boundary.
 
-Continuation is `--resume <session-id>`, which is why `launch` generates a UUID
-up front and stores it in `meta.json`.
+**Pi never commits on its own initiative.** There is no auto-commit logic in
+Pi; if a brief tells it to commit, it runs `git commit` itself via its bash
+tool (confirmed in the smoke test — the agent ran `git commit -q -m "..."`
+inside the worktree because the brief asked it to). If a brief doesn't ask
+for a commit, `land`'s own `stage_and_commit` step covers it.
 
-## Why the script assigns session ids
+## Auth and provider config
 
-CCS records sessions in `~/.ccs/delegation-sessions.json` keyed as
-`<profile>:latest` — one slot per profile. Launch three `deepseek` agents at
-once and whichever finishes last owns the slot; the other two become
-unresumable. The summary table's `Session` column is truncated to 8 characters
-and cannot be fed back to `--resume`.
+Pi's opencode-go key lives in `~/.pi/agent/auth.json` under the
+`opencode-go` key, set via `pi login` (or by editing the file directly). The
+fleet script reads it with `pi_key()` for its own preflight probe — never
+`cat` this file into a transcript or a log; only the probe's *result* (the
+provider's reply) should ever surface.
 
-Passing `--session-id` sidesteps both problems: the id is known before the agent
-starts and belongs to that agent alone.
+`~/.pi/agent/models.json` is where a genuinely custom OpenAI-compatible
+endpoint would be added if the fleet ever needed one outside Pi's built-in
+provider catalog. Not needed today: `opencode-go` and `deepseek` are both
+native Pi providers.
+
+## Every request needs an `x-opencode-session` header
+
+OpenCode Go requires this header for routing/optimisation on their end; a
+request missing it can be flagged as coming from a client they don't
+recognise. **Pi attaches this automatically** for any model on the
+`opencode`/`opencode-go` provider or any base URL on the `opencode.ai` host
+— confirmed in Pi's source (`provider-attribution.ts`), which also sends
+`x-opencode-client: pi`. The fleet script's own `probe_endpoint()` still sets
+this header by hand with a fresh UUID per call, since a preflight probe is a
+one-off outside any real Pi session.
+
+## Cloudflare blocks the default Python user-agent
+
+`opencode.ai` sits behind Cloudflare, which answers `Python-urllib/3.x` with
+**HTTP 403 `error code: 1010`** — a bot-signature block. It looks exactly
+like a dead profile. Any honest agent string is accepted; the preflight
+sends `fleet-preflight/1`. Worth knowing before concluding a key is bad.
+
+## AGENTS.md / CLAUDE.md handoff
+
+Pi loads project context files walking from the worktree's cwd up to the
+filesystem root, one per directory, preferring in order:
+`AGENTS.override.md` → `AGENTS.md` → `CLAUDE.md`. So a repo with only a
+`CLAUDE.md` needs no migration — Pi reads it as a fallback automatically.
+Pi's own global `~/.pi/agent/AGENTS.md` (not the user's `~/.claude/CLAUDE.md`)
+loads before the repo's file and is the place for fleet-wide process
+conventions that should apply to every delegated agent regardless of repo —
+see `docs/adr/0001-adopt-pi-as-the-fleet-harness.md` for why this replaced
+carrying the harness's own weight into every headless run.
+
+## Sessions and `resume` — verify before relying on it
+
+Pi persists sessions as JSONL, one file per session, normally under
+`~/.pi/agent/sessions/<cwd>/`. The fleet script instead passes
+`--session-dir "$dir/sessions" --name "$slug"` on both `launch` and `resume`,
+keeping each agent's session inside the fleet's own state directory (keyed
+by slug, not by worktree path) so it isn't tied to a worktree that `clean`
+will eventually delete.
+
+**This has not been verified end to end.** The launch/status/diff/land/clean
+loop was smoke-tested live and works; whether passing the same
+`--session-dir`/`--name` pair on a second `pi -p` call actually continues the
+first run's context (rather than starting a fresh session that happens to
+share a directory) has not been confirmed with a real multi-turn test. Run
+one before trusting `resume` on anything that matters — launch an agent,
+resume it with something only "remembering" the first turn would answer
+correctly, and check the log.
 
 ## State layout
 
-`$CCS_FLEET_HOME` (default `~/.ccs/fleet`), deliberately outside the repo so
+`$PI_FLEET_HOME` (default `~/.pi/fleet`), deliberately outside the repo so
 worktrees never show up in `git status`:
 
 ```
-~/.ccs/fleet/<repo-name>/<slug>/
-├── meta.json     slug, profile, tool, model, session_id, repo, worktree, branch, base_sha, started
+~/.pi/fleet/<repo-name>/<slug>/
+├── meta.json     slug, profile, model, repo, worktree, branch, base, base_sha, started
 ├── brief.md      the prompt as sent
-├── run.log       raw CCS/agy stdout+stderr
+├── run.log       raw pi stdout+stderr
+├── sessions/     this agent's Pi session file(s), addressed by --name <slug>
 ├── pid           written by the runner itself on start
 └── exit_code     written by the runner itself on finish
 ```
 
-`tool` (`ccs` or `agy`) is what every tool-shaped decision in the script
-branches on — argv construction, resume semantics, session-id capture timing.
-It's derived once at launch from the profile name (`tool_for_profile()`) and
-stored so later commands (`resume`, `status`) don't have to re-derive it.
-Runs launched before this field existed read back as an empty string;
-`resume` treats that as `ccs` for backward compatibility, `status` just shows
-an empty TOOL column for them.
-
 State is read from the filesystem, not a shell job table: `launch` returns
-immediately and its job table dies with it. `pid` plus `exit_code` is what makes
-`status` still meaningful minutes later, from a different shell.
+immediately and its job table dies with it. `pid` plus `exit_code` is what
+makes `status` still meaningful minutes later, from a different shell.
 
-Two consequences worth knowing. `died` means the runner vanished without writing
-`exit_code` — an OOM kill or a reboot, usually; `run.log` is the place to look.
-And exit `124` is `timeout` firing at `CCS_FLEET_TIMEOUT` (default 1800s), not
-a model failure.
+Two consequences worth knowing. `died` means the runner vanished without
+writing `exit_code` — an OOM kill or a reboot, usually; `run.log` is the
+place to look. And exit `124` is `timeout` firing at `PI_FLEET_TIMEOUT`
+(default 1800s), not a model failure.
+
+There is no `tool` field in `meta.json` the way the ccs/agy era needed one —
+Pi is the only tool this script drives, so nothing branches on it anymore.
 
 ## Landing and build artifacts
 
-`land` stages with `git add -A` so that new files the agent created (usually the
-whole point) get committed. That alone would also sweep up anything ephemeral
-the agent or your verification run left behind, and a repo with no `.gitignore`
-has no defence — this really happened during evaluation, putting `__pycache__`
-`.pyc` files into two merge commits.
+`land` stages with `git add -A` so that new files the agent created (usually
+the whole point) get committed. That alone would also sweep up anything
+ephemeral the agent or your verification run left behind, and a repo with no
+`.gitignore` has no defence — this really happened during the ccs-era
+evaluation, putting `__pycache__` `.pyc` files into two merge commits.
 
-So `land` layers an artifact pattern list over the repo's own `.gitignore` via
-`core.excludesFile`, then reports the difference between what plain `add -A`
-would have taken and what it actually took. Filtering without disclosure would
-be worse than the original bug: it could silently discard real work. Override
-with `CCS_FLEET_EXCLUDES_FILE=<path>` for project-specific patterns.
+So `land` layers an artifact pattern list over the repo's own `.gitignore`
+via `core.excludesFile`, then reports the difference between what plain
+`add -A` would have taken and what it actually took. Filtering without
+disclosure would be worse than the original bug: it could silently discard
+real work. Override with `PI_FLEET_EXCLUDES_FILE=<path>` for
+project-specific patterns.
 
 ## Error codes
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `Error: E104` | Profile name not in `~/.ccs/config.yaml`, or `:continue` syntax | Check `profiles:` in the config; use `--resume` |
-| HTTP 401 `CreditsError` | The go subscription's $60 monthly cap is spent, or the profile is pointed at the unfunded PAYG `/zen` | `fleet.sh verify` names which; route to `deepseek` for the former, fix the base URL for the latter |
+| `no opencode-go key in ~/.pi/agent/auth.json` | Pi was never authenticated on this machine | `pi login` |
+| HTTP 401 `CreditsError` | The go subscription's $60 shared cap is spent | Wait for the monthly reset, or route to `pi-deepseek` only on explicit request |
 | HTTP 401 `RegionError` | opencode's China-hosting opt-in is off for the workspace | Re-enable it in the opencode workspace settings |
-| HTTP 401 `ModelError: not supported` | Model id is wrong for that endpoint/format — `[1m]` on go, or `grok-4.6` anywhere | Pick an id from the format table above |
-| HTTP 401 (generic, after ~118s) | The retry loop ate the real message | `fleet.sh verify <profile>` — it prints what the provider actually said |
-| HTTP 403 `error code: 1010` | Cloudflare blocked the client's user-agent, not an auth failure | Send any honest `User-Agent` |
-| HTTP 429 `FreeUsageLimitError` | `oc-free`'s model hit its free-tier limit | `--model <another-free-id>`, or wait |
-| HTTP 500 on `/v1/messages` | That model has no Anthropic adapter server-side | Give the profile `CCS_DROID_PROVIDER: generic-chat-completion-api` so ccs proxies it |
-| HTTP 429 | Rate limited under fan-out | Stagger launches |
-| exit 124 | Hit `CCS_FLEET_TIMEOUT` | Split the task, or raise the limit |
-| `done` but `0 file(s)` | Agent decided nothing needed doing, or misread the brief | Read `run.log`; usually the brief was ambiguous |
-| agy `status: "ERROR"` | See the `error` field — bad `--model`, quota/billing limit, or a genuine tool failure | Fix the cause named in `error`; route to `deepseek` if it's a limit |
-| agy `done` but `0 file(s)` and worktree untouched | Ran without `--add-dir` on the worktree (shouldn't happen via the script, but check if hand-editing) | Confirm `--add-dir <worktree>` is present in the argv; check `response` text for a mention of the scratch folder |
+| HTTP 401 `ModelError: not supported` | Model id is wrong for the go endpoint | Check the id against `pi --list-models` or the fleet's own profile table |
+| HTTP 403 `error code: 1010` | Cloudflare blocked the client's user-agent, not an auth failure | Send any honest `User-Agent` (the preflight already does) |
+| HTTP 429 | Rate limited, or the shared cap tripped mid-run | Read `log <slug>`; stagger launches |
+| exit 124 | Hit `PI_FLEET_TIMEOUT` | Split the task, or raise the limit |
+| `done` but `0 file(s)` | Agent decided nothing needed doing, misread the brief, or narrated an edit without making the tool call | Read `run.log`; usually the brief was ambiguous or didn't say to *act*, not just describe |
 
-Config lives in `~/.ccs/config.yaml`. There is no `config.json` on this machine —
-the stale bundled skill's instruction to read one is wrong, and following it
-yields "file not found".
+Config lives in `~/.pi/agent/` (`auth.json`, `settings.json`,
+`models-store.json`, `trust.json`, `sessions/`) — not XDG-standard
+(`~/.config/pi`), which is a known open issue upstream; don't go looking for
+config there.
 
 ## Note on credentials
 
-`~/.ccs/*.settings.json` hold live API tokens in plaintext. Never `cat` them
-into a transcript, and never include them in a brief — a delegated agent has no
-need for them; `ccs` injects the env itself.
+`~/.pi/agent/auth.json` holds the live opencode-go API key in plaintext.
+Never `cat` it into a transcript, and never include it in a brief — a
+delegated agent has no need for it; Pi injects the env itself.
 
-## agy (Antigravity) mechanics
+## Version pinning
 
-`agy` is a genuinely different tool from `ccs`, not another profile on the same
-shape — three of its behaviors are surprising enough that they shaped how the
-script talks to it.
-
-### Verified command surface
-
-```bash
-agy --model <id> --dangerously-skip-permissions --add-dir <dir> \
-    --output-format json -p "<prompt>"
-```
-
-| Flag | Effect | Verified |
-|---|---|---|
-| `--model <id>` | Model for this run, by slug (`agy models` lists them) | yes |
-| `--dangerously-skip-permissions` | Required for unattended `-p` runs — without it, tool calls block on a permission prompt that never resolves headless | yes |
-| `--add-dir <dir>` | Grants trust for a directory for this run | yes — see below, this is not optional |
-| `--output-format json` | Prints one JSON object to stdout instead of prose | yes |
-| `--conversation <id>` | Resume that conversation, same workspace context | yes |
-
-Like CCS in `-p` mode, agy writes files unattended once permissions are
-skipped — same reason every run gets its own worktree.
-
-### `--add-dir` is not optional
-
-agy only writes into directories listed in its own
-`~/.gemini/antigravity-cli/settings.json` under `trustedWorkspaces`. Run it
-from an untrusted directory (which every fresh worktree is, by construction)
-and it does **not** error — it silently redirects file writes to its own
-scratch folder (`~/.gemini/antigravity-cli/scratch`) instead, and reports
-success. Verified directly: a run without `--add-dir` from inside a plain
-worktree wrote `README.md` into the scratch folder and said so in its own
-`response` text, while the worktree stayed untouched. Passing `--add-dir
-<worktree>` on every launch and resume is what makes the run land where it's
-supposed to; skipping it produces a `done` agent with a `1 file(s)` diff of
-nothing, in a folder the script never checks.
-
-### Session ids run backwards from CCS
-
-CCS wants a session id supplied up front (`--session-id`); agy generates its
-own and hands it back as `conversation_id` in the JSON response once the run
-finishes. That's why `launch` leaves `session_id` empty in `meta.json` for
-agy runs until the detached runner's finish step (`cmd_finish` /
-`agy_conversation_id`) parses it out of `run.log` after the process exits.
-Resuming before a run has ever finished (`session_id` still empty) fails
-loudly rather than resuming nothing — `resume` checks for this explicitly.
-Verified that `--conversation <id>` on a second call keeps the *same*
-`conversation_id` in its response, so no re-parsing is needed after a resume.
-
-### Output and errors are structured, and more honest than CCS's
-
-With `--output-format json`, every run — success or failure — prints exactly
-one JSON object:
-
-```json
-{"conversation_id": "...", "status": "SUCCESS", "response": "...",
- "duration_seconds": 6.9, "usage": {"input_tokens": ..., "total_tokens": ...}}
-```
-
-or, on failure:
-
-```json
-{"conversation_id": "", "status": "ERROR", "response": "",
- "error": "invalid model selection (...): model <x> is not recognized ..."}
-```
-
-Verified: an invalid `--model` value produced this shape with process exit
-code `1`. Unlike CCS, there's no fabricated cost figure and no
-model-that-silently-didn't-apply — `status`, `error`, and `usage` can all be
-trusted directly. `agy_conversation_id()` in the script deliberately scans
-`run.log` from the end and takes the last JSON-shaped line, in case anything
-else ever ends up ahead of it in the log.
-
-### A model can report success without ever editing
-
-Verified 2026-08-18 on `gpt-oss-120b-medium` (a profile since dropped, but
-the failure mode is not model-specific): given a one-line, loosely worded
-brief, it returned `status: "SUCCESS"` with prose describing the edit it
-claimed to make, while the worktree stayed untouched — `0 file(s)` in
-`status`, empty `diff`. Not the `--add-dir` scratch-folder trap above; just a
-model narrating a tool call it never issued. Re-running the identical task
-with a brief that explicitly said to use the file-editing tool and confirm
-the save succeeded end to end.
-
-So a `done` run with `0 file(s)` is a reason to read the log before
-relaunching, on any profile. The fix is usually a brief that says to act
-rather than describe, not a different model. It is also why the smoke test
-in the update skill grades on a non-empty diff rather than an exit code.
+Pi is young (public launch ~Feb 2026) and ships breaking changes between
+minor versions — the 0.84→0.85 line renamed a thinking-level type, for
+example. This file and the fleet script were verified against **v0.85.1**.
+Re-verify (`$F verify`, plus a real smoke-test `launch`) after any `pi
+update --self` before trusting the fleet again.
