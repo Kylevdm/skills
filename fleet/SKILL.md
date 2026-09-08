@@ -54,11 +54,16 @@ an agent against a backend that was never going to answer.
 ## The go profiles route code to China-hosted inference
 
 All three profiles run on models served from China — reaching them required
-enabling opencode's China-hosting opt-in on the workspace. That is a
-data-residency question, not a performance one. Raise it before sending
-client code, proprietary source, or anything under a contractual hosting
-constraint through them; doing the work in the orchestrator is the
-alternative.
+enabling opencode's China-hosting opt-in on the workspace. Hosting location
+itself is not the concern: the user is fine with Chinese-hosted inference.
+The actual constraint is data retention/training — a model that trains on
+submitted code is not acceptable, and models known to do that are excluded
+at the opencode workspace/account level before they ever reach this skill's
+routing table, not by a routing rule here. If a new profile is ever added,
+confirm its training/retention terms before wiring it in; this is meant to
+be a standing check whenever `fleet-update` changes the profile table (that
+skill itself still needs a Pi-era rewrite before it can carry this check —
+see the fog ledger).
 
 ## Deciding what to delegate
 

@@ -193,7 +193,7 @@ project-specific patterns.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `no opencode-go key in ~/.pi/agent/auth.json` | Pi was never authenticated on this machine | `pi login` |
-| HTTP 401 `CreditsError` | The go subscription's $60 shared cap is spent | Wait for the monthly reset, or route to `pi-deepseek` only on explicit request |
+| HTTP 401 `CreditsError` | The go subscription's $60 shared cap is spent | Wait for the monthly reset — `pi-deepseek` shares this same cap today too, so it is not an escape route; a separate DeepSeek-API profile outside the shared cap is planned but not yet wired up |
 | HTTP 401 `RegionError` | opencode's China-hosting opt-in is off for the workspace | Re-enable it in the opencode workspace settings |
 | HTTP 401 `ModelError: not supported` | Model id is wrong for the go endpoint | Check the id against `pi --list-models` or the fleet's own profile table |
 | HTTP 403 `error code: 1010` | Cloudflare blocked the client's user-agent, not an auth failure | Send any honest `User-Agent` (the preflight already does) |

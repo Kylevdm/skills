@@ -13,7 +13,9 @@
     "Count Skill(skill=\"fleet\") anywhere in the transcript instead — and",
     "scan the whole transcript, since Claude often reads a file to orient",
     "itself before invoking the skill.",
-    "Last measured 2026-08-28: 13/15, with all 6 negatives clean.",
+    "Last measured 2026-08-28: 13/15, with all 6 negatives clean (pre-Pi",
+    "migration count, includes a since-removed antigravity case; re-measure",
+    "after the fleet skill's 2026-09-08 Pi rewrite).",
     "The two known misses are recorded below rather than deleted."
   ],
   "evals": [
@@ -22,7 +24,6 @@
     {"query": "can you delegate this refactor to another model? i don't want to burn quota in this session", "should_trigger": true},
     {"query": "farm this out to deepseek", "should_trigger": true},
     {"query": "fan these three out in parallel please", "should_trigger": true},
-    {"query": "use antigravity for this one", "should_trigger": true},
     {"query": "get opencode zen to take a pass at the parser rewrite", "should_trigger": true},
     {"query": "check on the ccs agents you launched earlier and show me their diffs", "should_trigger": true},
     {"query": "any of the delegated agents finished yet? land the ones that look right", "should_trigger": true},

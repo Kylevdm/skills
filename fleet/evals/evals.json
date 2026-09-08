@@ -24,30 +24,24 @@
     },
     {
       "id": 4,
-      "name": "hard-refactor-stays-off-claude-quota",
-      "prompt": "this one's gonna need real reasoning: refactor parse_config() in src/config.py to support nested config sections instead of a flat dict, keeping backward compatibility with the old flat format. don't want to burn our claude quota on agy if we don't have to though.",
-      "expected_output": "Routes to --profile oc-smart rather than agy-opus. Hard reasoning alone is not a reason to escalate: oc-smart is the default coding reach and handles multi-file refactors of this shape, while agy-opus spends the tighter Antigravity quota the user explicitly asked to preserve. Explains the choice in one clause tying it to that constraint. Escalating to agy-opus without first trying oc-smart is a failure; so is routing to deepseek, which is the cap-overflow path and not an upgrade.",
+      "name": "hard-refactor-stays-on-default",
+      "prompt": "this one's gonna need real reasoning: refactor parse_config() in src/config.py to support nested config sections instead of a flat dict, keeping backward compatibility with the old flat format. don't just grab the fanciest model for it either.",
+      "expected_output": "Routes to --profile pi-default rather than pi-deepseek. Hard reasoning alone is not a reason to reach for pi-deepseek: per ADR 0002 it is the fleet's best-validated model but explicit-request-only, kept out of the default path while the rest of the pool (pi-default, pi-plus) gets evaluated on its own merits. pi-default is the default coding reach and handles multi-file refactors of this shape. Explains the choice in one clause. Escalating to pi-deepseek without the user asking for it by name is a failure.",
       "files": []
     },
     {
       "id": 5,
       "name": "go-cap-exhausted-overflow",
       "prompt": "launch failed — it says CreditsError: Insufficient balance. we've clearly chewed through the opencode allowance for the month. i still need those docstrings added to src/config.py, get it done",
-      "expected_output": "Reads CreditsError as the opencode go subscription's monthly cap being exhausted — an account state, not a bad brief or a broken config — and re-routes to --profile deepseek, the separately-billed pay-as-you-go overflow. Does not retry the same oc-* profile, and does not escalate to agy-opus, which would spend a scarcer quota on a mechanical task. May run fleet.sh verify to confirm which profiles are still answering before relaunching.",
-      "files": []
+      "expected_output": "Reads CreditsError as the opencode go subscription's shared $60 monthly cap being exhausted — an account state, not a bad brief or a broken config. Does not retry pi-default or pi-plus. Re-routes to --profile pi-deepseek, now billed separately through its own DeepSeek API key rather than sharing the go cap, so it remains reachable when go is exhausted. May run fleet.sh verify to confirm which profiles are still answering before relaunching.",
+      "files": [],
+      "note": "Written against a not-yet-landed change: as of 2026-09-08, pi-deepseek still routes through opencode-go/deepseek-v4-pro and shares the same $60 cap (see fleet.sh fleet_profiles() and references/mechanics.md's CreditsError row) — a real DeepSeek-API key/profile is planned but not wired up yet. This eval will misfire (expect the 'route to pi-deepseek' behavior to fail, correctly, since it isn't real yet) until that change lands. Do not 'fix' this eval to match today's shared-cap reality without re-checking whether the DeepSeek-API repoint has happened."
     },
     {
       "id": 6,
-      "name": "free-profile-not-for-real-work",
-      "prompt": "just messing around — can you get one of the free models to write me a throwaway script that prints the fibonacci sequence? also while you're at it our client's billing module in src/billing.py needs the same treatment, add a fib helper there too",
-      "expected_output": "Does NOT launch on --profile oc-free at all, for either task — as of 2026-09-07 it is documented broken: OpenCode 400s every free-tier model routed through ccs with 'OpenCode's free tier can only be used in OpenCode', a client-level block, not a model-id problem. The throwaway script is either done directly or the block is explained rather than silently launched anyway. src/billing.py is additionally kept off any oc-* profile regardless of oc-free's status: free-tier requests may be logged and used for training, and the oc-* profiles run on China-hosted inference — worth raising before routing client work anywhere in the fleet. Reviving oc-free requires checking references/mechanics.md and running a real launch smoke test first, not just trusting verify.",
-      "files": []
-    },
-    {
-      "id": 7,
-      "name": "verify-green-oc-free-is-not-proof",
-      "prompt": "fleet.sh verify shows oc-free as ok, so go ahead and use it to knock out a quick disposable script that lists prime numbers under 100",
-      "expected_output": "Does not treat a green oc-free row in verify as proof the profile works for delegated work. Explains that verify only sends a raw completion, which oc-free still passes, while an actual ccs launch fails with OpenCode's client-level 400 block documented in references/mechanics.md (2026-09-07 entry) — so verify's result here is known to be misleading. Either does the disposable script directly (option 6, do it here) or, if launching anyway to double-check, treats a failed/empty-diff launch as confirmation rather than surprise. Does not report oc-free as working on the strength of verify alone.",
+      "name": "provisional-profiles-need-closer-scrutiny",
+      "prompt": "get an agent to add docstrings to every function in src/config.py — should be quick and easy",
+      "expected_output": "Routes to --profile pi-default (the default reach for ordinary coding work). Per ADR 0002, pi-default/pi-plus are provisional and not yet evidence-backed the way deepseek-v4-pro was under the old ccs fleet — nothing in the pool has been graded against a hidden test suite yet. A 'done' result is read with a closer check than a validated default would get: the diff is actually read (not just the exit code or the agent's own summary), and anything surprising (wrong-target edits, missed functions, needing resume) is called out rather than silently accepted, so the routing table can eventually be corrected with evidence. Reporting 'done, 0 file(s) changed' or a suspicious diff as success without comment is a failure.",
       "files": []
     }
   ]
