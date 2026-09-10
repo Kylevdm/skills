@@ -58,6 +58,7 @@ implementation authority.
 - [Specify transcript retention and purge](fleet-redesign/tickets/11-specify-transcript-retention-and-purge.md): Pi's own session file per stage attempt, kept in the job directory under a discovered path, scrubbed at seal and at egress, capped at 8MB per attempt as a runaway detector rather than rotated, full-fidelity through archive, and deleted transcripts-first by purge.
 - [Specify the input-token estimator](fleet-redesign/tickets/12-specify-the-input-token-estimator.md): A crude pre-dispatch tripwire — assembled bytes over 3.5, eligible below half the model's limit — justified by feasibility rather than Qwen's band, calibrated against real usage, returning `input-too-large` when nothing fits and recording a band violation when it was wrong.
 - [Gate git subcommands for delegated writers](fleet-redesign/tickets/13-gate-git-subcommands-for-delegated-writers.md): The git gate is an explicit guardrail, not a boundary — deny-by-default subcommands, refused relocating flags, blocked `.git` writes, fixed and non-overlayable — while a whole-repository ref diff around every bash-holding stage is what actually protects the namespace invariant, and a detected movement returns the job rather than retrying or repairing it.
+- [Create the pi-fleet public repository](fleet-redesign/tickets/14-create-the-pi-fleet-public-repo.md): `Kylevdm/pi-fleet` now exists — public, MIT, issues enabled, README-only — cloned and pushed from the fixed `npm link` path `~/pi-fleet`.
 
 ## Not yet specified
 
