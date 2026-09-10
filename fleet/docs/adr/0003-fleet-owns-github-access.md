@@ -51,5 +51,6 @@ was transcribing it.
   guarantee against it is the capability boundary above, not filtering; the
   brief fences it structurally so the boundary is legible.
 - Because Fleet reads GitHub's native relations only, a tracker that publishes
-  blockers as prose yields tickets that look unblocked. That fix belongs to
-  `to-tickets`.
+  blockers as prose yields tickets that look unblocked. Superseded by
+  [ADR 0004](0004-prose-refuses-never-admits.md): that fix is Fleet's, not
+  `to-tickets`'s — Fleet reads the prose solely to refuse.
