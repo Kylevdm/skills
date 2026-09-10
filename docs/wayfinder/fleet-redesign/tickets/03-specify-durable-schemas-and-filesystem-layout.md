@@ -101,3 +101,13 @@ derives every other path from the validated id.
 Prototype (schemas, layout rules, and a clickable crash walkthrough covering
 every write point): branch `prototype/fleet-durable-store`, commit `5db84c9`,
 at `fleet/prototypes/durable-store/`.
+
+## Amendment (2026-09-10)
+
+[Plan TypeScript packaging and migration](09-plan-typescript-packaging-and-migration.md)
+strikes legacy shell-job support. Fleet does not recognise, list, inspect,
+diff, or clean a `meta.json` directory with no sibling `job.json` — it ignores
+the pre-cutover store entirely and ships no verb that touches it. The paragraph
+above admitting legacy jobs as "list, inspect, diff, and safe clean only" no
+longer holds; "the new state machine never writes outside its four subtrees"
+now describes reads as well as writes.

@@ -129,3 +129,16 @@ directories untouched. A directory holding `meta.json` with no sibling
 migrates one into the new store.
 
 Prototype: `../assets/08-cli-mcp-adapters/surface.md`.
+
+## Amendment (2026-09-10)
+
+[Plan TypeScript packaging and migration](09-plan-typescript-packaging-and-migration.md)
+strikes legacy shell-job support. There is no `legacy: true` listing and no
+`policy-denied` legacy branch: pre-cutover directories are invisible to Fleet.
+The clean break from `fleet.sh` stands and is now total — the script is deleted
+rather than kept readable, and its verbs get no pointer stub.
+
+It also settles the registration mechanics this ticket deferred: Claude via
+`claude mcp add-json --scope user` (never a direct `~/.claude.json` write),
+Codex via an in-place `[mcp_servers.fleet]` TOML edit, no ownership marker in
+either, `conflict` on an existing or hand-edited entry unless `--force`.

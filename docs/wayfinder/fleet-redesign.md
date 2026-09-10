@@ -27,6 +27,13 @@ the local-Markdown tracker. Child tickets are in
 blocking. An open ticket with an empty `assignee` and no open `blocked_by`
 ticket is on the frontier.
 
+From [Plan TypeScript packaging and migration](fleet-redesign/tickets/09-plan-typescript-packaging-and-migration.md)
+onward the module's home is the public `Kylevdm/pi-fleet` repo, and this map
+moves onto its issue tracker at map agreement — see
+[Migrate the map to GitHub issues](fleet-redesign/tickets/15-migrate-the-map-to-github-issues.md).
+`fleet/scripts/fleet.sh` is **frozen** as of 2026-09-10: still runnable, no
+further edits.
+
 Use `grilling` and `domain-modeling` for grilling tickets, `prototype` for
 prototype tickets, and `codebase-design` for the Fleet module interface. Use
 `unslop` for written artifacts. Consult `writing-for-agents` and
@@ -45,7 +52,8 @@ implementation authority.
 - [Specify the Pi work-unit protocol](fleet-redesign/tickets/05-specify-the-pi-work-unit-protocol.md): Fleet drives one detached `pi --mode rpc` subprocess per stage, gated by a single Fleet extension, sealing each stage on a terminating `submit_*` tool call; verified live.
 - [Specify Git isolation, assembly, refresh, and landing](fleet-redesign/tickets/06-specify-git-isolation-assembly-refresh-and-landing.md): Fleet never writes a ref outside `refs/heads/fleet/<jobId>/`, assembles from the pinned base with one delegated integration rung, refreshes a moved target by rebase plus re-check only, and `land` produces a fast-forwardable candidate branch rather than moving the target ref.
 - [Specify GitHub ingestion and deduplication](fleet-redesign/tickets/07-specify-github-ingestion-and-deduplication.md): Fleet fetches its own trusted snapshot from a bare issue reference, uses native GitHub relations only, refuses admission on an open blocker, and holds the dedup key through acceptance.
-- [Design the CLI and MCP adapters](fleet-redesign/tickets/08-design-the-cli-and-mcp-adapters.md): Two thin translators over one module, a single result envelope carrying the legal `next` calls, hand-back by a 60-second `wait` long-poll that wakes only on actionable states, confirmation inside Fleet for `purge` alone, and a clean break from the shell CLI with legacy jobs read-only.
+- [Design the CLI and MCP adapters](fleet-redesign/tickets/08-design-the-cli-and-mcp-adapters.md): Two thin translators over one module, a single result envelope carrying the legal `next` calls, hand-back by a 60-second `wait` long-poll that wakes only on actionable states, confirmation inside Fleet for `purge` alone, and a clean break from the shell CLI (legacy-job support since struck by ticket 09).
+- [Plan TypeScript packaging and migration](fleet-redesign/tickets/09-plan-typescript-packaging-and-migration.md): Fleet moves to a standalone public `Kylevdm/pi-fleet` repo, runs from source with no build step, registers over each host's own config surface, migrates nothing because legacy support is removed outright, and cuts over in one deletion commit that is revertible.
 
 ## Not yet specified
 
@@ -56,6 +64,9 @@ implementation authority.
   writes them as prose silently produces unblocked-looking tickets. The fix
   belongs on the `to-tickets` side, and the migration plan may need to carry it.
   Same patch covers relation availability on hosts other than github.com.
+  [Migrate the map to GitHub issues](fleet-redesign/tickets/15-migrate-the-map-to-github-issues.md)
+  now tests relation availability first-hand on `pi-fleet`; its finding decides
+  whether this patch graduates into a `to-tickets` ticket or dissolves.
 
 ## Out of scope
 
