@@ -169,3 +169,16 @@ failing.
 
 Note for implementation: a driver that SIGTERMs its own child after `agent_settled` sees exit
 143, not 0. Exit code alone is not an outcome signal — the sealed artifact is.
+
+## Amendment (2026-09-10)
+
+[Specify check-command discovery and the checking stage
+contract](16-specify-check-command-discovery.md) makes one narrow exception to
+"nothing else crosses a stage boundary": the resolved check command list joins
+the stage brief as job-level context. A writer judged against a command it was
+never shown produces manufactured quality failures, and the disclosure is what
+makes the writer's `commandsRun` self-report comparable to Fleet's independent
+run.
+
+`checking` is confirmed as a stage that spawns **no** Pi process — Fleet runs
+the configured commands as its own children and seals their exit codes.

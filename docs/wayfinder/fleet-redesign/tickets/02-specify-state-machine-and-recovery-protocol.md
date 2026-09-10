@@ -100,3 +100,19 @@ the cancellation deadline, Fleet records that fact, fences the job from further
 transitions, and still marks it `cancelled`; a later recovery attempt may only
 collect evidence or verify termination, never resume work. `clean` and
 `archive` retain this record under their existing rules.
+
+## Amendment (2026-09-10)
+
+[Specify check-command discovery and the checking stage
+contract](16-specify-check-command-discovery.md) qualifies two rules above.
+
+The requirement that `checking` seal passed evidence before
+`ready-for-acceptance` is **conditional on the stage plan containing a
+`checking` stage**. A repository configured `checks: none` omits the stage
+entirely rather than sealing a vacuous pass, and carries a warning code and
+elevated review depth instead.
+
+Failure of the configured `setup` command list — the per-worktree dependency
+preparation that precedes the checks — joins the **infrastructure** class: a
+missing lockfile or an unreachable registry is not the writer's doing and
+spends no quality attempt.

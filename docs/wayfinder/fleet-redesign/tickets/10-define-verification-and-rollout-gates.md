@@ -131,3 +131,13 @@ no closed ticket says where that command comes from. Graduated as [Specify
 check-command discovery and the checking stage
 contract](16-specify-check-command-discovery.md) rather than folded in here,
 since it is a runtime spec decision and not a gate.
+
+## Amendment (2026-09-10, check-command discovery)
+
+[Specify check-command discovery and the checking stage
+contract](16-specify-check-command-discovery.md) resolves the decision this
+ticket deferred, and grows the warning-code set from eight to eleven:
+writer-reported-green against a red Fleet run, a check that hit its timeout,
+and a job admitted under `checks: none`. All three derive
+`reviewDepth: "elevated"` — each means the green signal the primary would
+otherwise accept on is absent or untrustworthy.

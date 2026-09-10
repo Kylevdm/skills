@@ -128,3 +128,12 @@ resolved job-relative path is discovered by glob at seal and recorded in
 Fleet does not write the file and has no write-time hook into a detached Pi
 subprocess. Scrubbing happens once at seal, by the same rename-commit rule as
 every other write, and again at every egress excerpt.
+
+## Amendment (2026-09-10, check-command discovery)
+
+[Specify check-command discovery and the checking stage
+contract](16-specify-check-command-discovery.md) adds a twelfth versioned
+record type, `checks-report`, written to `out/checks.json`. Ticket 06's three
+check points each seal their own stage, so `stages/NN-checking/` **recurs
+within a single job** — the trigger (`post-write`, `post-assembly`,
+`post-refresh`) is recorded in the report rather than in the path.

@@ -11,7 +11,6 @@ blocked_by:
   - 12-specify-the-input-token-estimator.md
   - 13-gate-git-subcommands-for-delegated-writers.md
   - 14-create-the-pi-fleet-public-repo.md
-  - 16-specify-check-command-discovery.md
 ---
 
 ## Question
