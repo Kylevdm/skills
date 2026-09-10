@@ -57,6 +57,22 @@ parent issue, and blockers, and it exposes no GitHub credential to delegated
 agents. It is authoritative for the whole job: never re-fetched, never patched.
 _Avoid_: brief, context dump.
 
+**Tracker conformance**: what an issue tracker must expose for Fleet to admit
+its tickets, stated as capabilities rather than as one tracker's nouns — a
+machine-readable parent relation and a machine-readable blocker relation.
+Blockers are mandatory, because an unbacked blocker starts a writer on
+unfinished ground; the parent relation is recommended, because losing it costs
+the writer scope context but nothing unsafe. _Avoid_: tracker support, GitHub
+requirements.
+
+**Unverifiable blocker**: a ticket's own claim to be gated by work that no
+native tracker relation backs. Fleet refuses to admit it, distinctly from
+refusing work with a genuinely open blocker, because the two ask different
+things of the human: an open blocker means wait, an unverifiable one means fix
+the tracker. Prose is read only to raise this refusal and never to satisfy a
+gate — it can refuse admission, never grant it. _Avoid_: missing blocker,
+broken dependency.
+
 **Repository identity**: the stable identity of the repository a fleet job acts
 on, unchanged by a rename or transfer. It is what Fleet deduplicates active
 ticket jobs by, scopes repository writer capacity to, and records on routing
