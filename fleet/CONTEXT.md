@@ -318,3 +318,17 @@ orchestrated by the fleet. _Avoid_: Antigravity CLI, backend.
 provider profile. Retired because per-machine setup was fragile and it dragged
 Claude Code's interactive plugins and skills into headless runs where they
 served nothing. Records now drive the harness directly.
+
+**Estimated input**: the crude pre-dispatch tripwire Fleet computes over the
+bytes it assembles for one stage brief — role brief, input snapshot, depended-on
+sealed artifacts, repository context files — divided by a fixed constant. It
+gates eligibility against a model's hard context limit and its band threshold.
+It is an estimate, never a measurement, and never evidence about a model's
+quality; the summed per-message `input` is the measurement. _Avoid_: token
+count, context size.
+
+**Band violation**: an attempt whose true summed usage crossed a model's pricing
+band threshold despite an estimate that said it would not. Recorded on the
+attempt, excluded from the cost cohort, and a `fleet-update` signal that the
+divisor or margin is too loose. _Avoid_: overrun, context overflow (that is a
+`length` quality failure, which is a different condition).
