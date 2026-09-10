@@ -45,6 +45,7 @@ implementation authority.
 - [Specify the Pi work-unit protocol](fleet-redesign/tickets/05-specify-the-pi-work-unit-protocol.md): Fleet drives one detached `pi --mode rpc` subprocess per stage, gated by a single Fleet extension, sealing each stage on a terminating `submit_*` tool call; verified live.
 - [Specify Git isolation, assembly, refresh, and landing](fleet-redesign/tickets/06-specify-git-isolation-assembly-refresh-and-landing.md): Fleet never writes a ref outside `refs/heads/fleet/<jobId>/`, assembles from the pinned base with one delegated integration rung, refreshes a moved target by rebase plus re-check only, and `land` produces a fast-forwardable candidate branch rather than moving the target ref.
 - [Specify GitHub ingestion and deduplication](fleet-redesign/tickets/07-specify-github-ingestion-and-deduplication.md): Fleet fetches its own trusted snapshot from a bare issue reference, uses native GitHub relations only, refuses admission on an open blocker, and holds the dedup key through acceptance.
+- [Design the CLI and MCP adapters](fleet-redesign/tickets/08-design-the-cli-and-mcp-adapters.md): Two thin translators over one module, a single result envelope carrying the legal `next` calls, hand-back by a 60-second `wait` long-poll that wakes only on actionable states, confirmation inside Fleet for `purge` alone, and a clean break from the shell CLI with legacy jobs read-only.
 
 ## Not yet specified
 

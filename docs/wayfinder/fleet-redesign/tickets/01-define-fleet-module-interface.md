@@ -108,3 +108,19 @@ ambient `gh` credentials; the snapshot is not a caller argument. "Accepts no
 GitHub credential" stands and now means what it says: no token is ever an
 argument. A standalone objective is still supplied directly. Every other
 decision in this resolution stands unchanged.
+
+### Amendment (2026-09-10, adapters)
+
+[Design the CLI and MCP adapters](08-design-the-cli-and-mcp-adapters.md) adds
+one lifecycle operation, needed by both adapters:
+
+```ts
+wait(request: WaitRequest): Promise<Outcome<JobView>>;
+```
+
+`WaitRequest` carries a `jobId` and a `timeoutSeconds` clamped to 60. `wait`
+blocks until the job reaches `ready-for-acceptance`,
+`returned-to-orchestrator`, or `cancelled`, or until the clamp expires, and
+always returns a `JobView` — a timeout is `timedOut: true`, never a failure.
+It is read-only, takes no `expectedRevision`, and holds no lease. Every other
+decision in this resolution stands unchanged.
