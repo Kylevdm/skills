@@ -111,3 +111,20 @@ the pre-cutover store entirely and ships no verb that touches it. The paragraph
 above admitting legacy jobs as "list, inspect, diff, and safe clean only" no
 longer holds; "the new state machine never writes outside its four subtrees"
 now describes reads as well as writes.
+
+## Amendment (2026-09-10)
+
+[Specify transcript retention and purge](11-specify-transcript-retention-and-purge.md)
+overturns two claims above.
+
+**The transcript path.** `stages/NN-<kind>/logs/pi.jsonl` cannot exist: Fleet
+retains Pi's own session file and Pi names that file itself. The layout entry
+becomes `stages/NN-<kind>/session/` — the directory Fleet passes as
+`--session-dir` — holding one Pi-named `<ISO-timestamp>_<uuid>.jsonl`, whose
+resolved job-relative path is discovered by glob at seal and recorded in
+`stage.json`.
+
+**Redaction timing.** "Scrubbed as the transcript is written" no longer holds;
+Fleet does not write the file and has no write-time hook into a detached Pi
+subprocess. Scrubbing happens once at seal, by the same rename-commit rule as
+every other write, and again at every egress excerpt.

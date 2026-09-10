@@ -154,6 +154,15 @@ orchestration stage. Fleet seals it before advancing and resumes after failure
 from the last sealed stage rather than repeating paid work. _Avoid_: agent
 message, transcript.
 
+**Transcript**: the Pi session file retained for one stage attempt. It records
+how a stage reached its artifact and is never the artifact itself, never the
+sealed evidence, and never read to determine an outcome. _Avoid_: log, session,
+event stream.
+
+**Event stream**: the live RPC events Fleet consumes during a stage to classify
+failure and sum usage, then discards. It is roughly ten times the size of the
+transcript and carries nothing the transcript lacks. _Avoid_: transcript, log.
+
 **Stage plan**: the ordered set of orchestration stages recorded at admission.
 A direct job omits discovery stages. A discovery job may include read-only
 scouting and planning before writing. _Avoid_: workflow, pipeline.
