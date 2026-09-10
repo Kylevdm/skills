@@ -54,6 +54,7 @@ implementation authority.
 - [Specify GitHub ingestion and deduplication](fleet-redesign/tickets/07-specify-github-ingestion-and-deduplication.md): Fleet fetches its own trusted snapshot from a bare issue reference, uses native GitHub relations only, refuses admission on an open blocker, and holds the dedup key through acceptance.
 - [Design the CLI and MCP adapters](fleet-redesign/tickets/08-design-the-cli-and-mcp-adapters.md): Two thin translators over one module, a single result envelope carrying the legal `next` calls, hand-back by a 60-second `wait` long-poll that wakes only on actionable states, confirmation inside Fleet for `purge` alone, and a clean break from the shell CLI (legacy-job support since struck by ticket 09).
 - [Plan TypeScript packaging and migration](fleet-redesign/tickets/09-plan-typescript-packaging-and-migration.md): Fleet moves to a standalone public `Kylevdm/pi-fleet` repo, runs from source with no build step, registers over each host's own config surface, migrates nothing because legacy support is removed outright, and cuts over in one deletion commit that is revertible.
+- [Define verification and rollout gates](fleet-redesign/tickets/10-define-verification-and-rollout-gates.md): A fixed six-rung verification ladder (rungs 0-3 hermetic in CI, live Pi smoke and evals hand-run) with frozen manifests of named invariant tests, and a four-stage autonomy staircase whose S0 → S1 advance *is* ticket 09's deletion commit; halt demotes a stage, abort is reserved for integrity failures.
 
 ## Not yet specified
 

@@ -140,3 +140,13 @@ disjoint.
 The module is tested incrementally as it is built rather than only at the end.
 What must pass, and when, is [Define verification and rollout
 gates](10-define-verification-and-rollout-gates.md)'s to settle.
+
+## Amendment (2026-09-10, ticket 10)
+
+[Define verification and rollout
+gates](10-define-verification-and-rollout-gates.md) identifies **step 5 — the
+single deletion commit — as the S0 → S1 rollout advance**, on the same
+evidence and as one event. During S0 every job is hand-submitted, so the frozen
+`fleet.sh` costs nothing by still existing; after the commit the fallback is
+the `pre-fleet-ts` revert. The gate criteria this ticket deferred are settled
+there.

@@ -193,3 +193,15 @@ coupling ticket 01 was written to prevent, and would break the skill on every
 store migration. They are two operations rather than one because `evidence` is
 cheap and read-only while `probe` spends real money, and the CLI and MCP
 adapters must treat them differently.
+
+## Amendment (2026-09-10, ticket 10)
+
+[Define verification and rollout
+gates](10-define-verification-and-rollout-gates.md) stamps the active pilot
+stage (`S0`-`S3`) on every attempt record, so the evidence log can be sliced by
+stage — without it the pilot's acceptance-rate trend blurs S1 and S3 attempts
+together. `evidence` gains a `--stage-report` form returning the stage-advance
+and halt numbers computed from the log. The pilot limits themselves live in a
+`pilot` block of `$PI_FLEET_HOME/config.json`, a **sibling of the registry
+overlay and never part of it**: it is human-owned and `fleet-update` does not
+write it.

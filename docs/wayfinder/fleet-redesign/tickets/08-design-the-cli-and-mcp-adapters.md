@@ -142,3 +142,16 @@ It also settles the registration mechanics this ticket deferred: Claude via
 `claude mcp add-json --scope user` (never a direct `~/.claude.json` write),
 Codex via an in-place `[mcp_servers.fleet]` TOML edit, no ownership marker in
 either, `conflict` on an existing or hand-edited entry unless `--force`.
+
+## Amendment (2026-09-10, ticket 10)
+
+[Define verification and rollout
+gates](10-define-verification-and-rollout-gates.md) adds two fields to the
+envelope: `warnings: []`, a **closed enum** held to the same discipline as the
+`problem` taxonomy above — `risk-raised-by-agent`, `escalation-consumed`,
+`reviewer-family-constraint-dropped`, `integration-rung-used`,
+`command-blocked`, `availability-rotation`, `refresh-rebased`,
+`model-overridden` — and `reviewDepth: "normal" | "elevated"`, derived from the
+first five. Elevated means the primary reads the diff itself rather than
+accepting on summary plus green checks. Adding a code is an interface
+amendment, never a free-form addition.
