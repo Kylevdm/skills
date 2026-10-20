@@ -1,0 +1,32 @@
+# OpenCode Go monthly limits (Go plan, not Go Plus), from https://opencode.ai/v2/docs/console/go/
+# Checked 2026-10-20. A run uses spend / limit of the allowance; fractions add up across models.
+# Windows: 5 h = 20%, week = 50%, month = 100% of the summed allowance.
+# limit "free" = unlimited free model (counts 0). Refresh when a model isn't listed.
+# model	monthly_usd	note
+glm-5.3-flash	60
+glm-5.3	15
+glm-5.2	60
+kimi-k3	15
+kimi-k2.7-code	60
+longcat-2.0	60
+longcat-2.5-preview-free	free	limited time
+step-5-preview	60	4x for a limited time; normally 15
+mimo-v2.6-flash	60
+mimo-v2.6-pro	15
+mimo-v2.5	60
+mimo-v2.5-pro	15
+minimax-m3	60
+muse-spark-1.3-contributor	60
+muse-spark-1.2-contributor	60
+qwen3.8-max	15
+qwen3.8-flash	30
+qwen3.7-plus	60
+deepseek-v4.1-flash	80
+deepseek-v4-pro	15
+hy4-preview	30
+hy3	60
+grok-4.7	15
+gpt-6-luna	15	also on ChatGPT Plus: use openai/gpt-6-luna
+gpt-5.6-luna	15	also on ChatGPT Plus: use openai/gpt-5.6-luna
+claude-haiku-5-5	15
+gemini-4-argon-contributor	60	2x for a limited time; normally 30

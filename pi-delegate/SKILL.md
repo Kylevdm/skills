@@ -32,26 +32,65 @@ conversation's context, or when it is security-critical.
 | General fixes (default) | `opencode-go/glm-5.2` |
 | Larger multi-file or design-heavy work; second-opinion reviews | `openai/gpt-6.1-sol` (ChatGPT Plus quota) |
 | Mechanical edits, writing tests, lint/type fix-ups | `opencode-go/kimi-k2.7-code` |
-| Cheap, fast, large-context sweeps (off-peak) | `opencode-go/deepseek-v4.1-flash` |
+| Cheap, fast, large-context sweeps; extra reviewer when allowance is tight | `opencode-go/deepseek-v4.1-flash` |
 | Throwaway prototypes | `opencode-go/longcat-2.5-preview-free` |
 
 - When reviewing gpt-6.1-sol's own output, use glm-5.2, so it isn't grading itself.
-- **Never** `openai/gpt-6-sol`. **Avoid unless asked:** Kimi K3, Grok 4.7, Qwen3.8 Max, GLM-5.3 and any
-  direct `deepseek/*` model (paid credits; OpenCode Go serves the same models). `scripts/run.sh`
-  refuses the never/paid ones.
-- The ChatGPT account only accepts newer models: gpt-6.1-sol works; gpt-5.5 / 5.3-codex / 5.4-mini
-  return 400.
-- OpenCode Go is one allowance: each model's spend ÷ that model's monthly limit, summed (5 h window
-  = 20%, week = 50%). Choose by spend ÷ limit, not token price. Limits:
-  https://opencode.ai/v2/docs/console/go/
+- **Never** `openai/gpt-6-sol`. **Never** direct `deepseek/*` (paid credits; OpenCode Go serves the
+  same models).
+- **Avoid unless asked:** any Go model with a $15 monthly limit (see
+  [assets/go-limits.tsv](assets/go-limits.tsv)): Kimi K3, Grok 4.7, Qwen3.8 Max, GLM-5.3, DeepSeek V4
+  Pro, MiMo Pro, Claude Haiku. They use the allowance four times faster than a $60 model. The luna
+  models are also on ChatGPT Plus, so use them only as `openai/gpt-6-luna` / `openai/gpt-5.6-luna`.
+  `scripts/run.sh` refuses all of these; `PI_DELEGATE_ALLOW_LOW_LIMIT=1` overrides when the user asked.
+- ChatGPT Plus accepts gpt-6.1-sol, gpt-6-astra, gpt-6-luna, gpt-5.6-sol, gpt-5.6-terra and
+  gpt-5.6-luna (checked 2026-10-20); gpt-5.5, gpt-5.3-codex and gpt-5.4-mini return 400. Plus caps per
+  model aren't published: use it freely and back off on a rate-limit error.
 - pi's default model is `opencode-go/kimi-k2.7-code`, so a forgotten `--model` costs little, but pass
   it every time anyway.
 
+### The Go allowance
+
+OpenCode Go is **one summed allowance**: each run uses spend ÷ that model's monthly limit, and the
+fractions of all models add up against the 5-hour (20%), weekly (50%) and monthly (100%) windows.
+$11 of glm-5.2 is 11/60 = 18% of the month, and nearly a whole 5-hour window: that is exactly where
+the 2026-10-18 batch hit `429 GoUsageLimitError`. So choose by spend ÷ limit, not token price:
+deepseek-v4.1-flash ($80 limit, cheap tokens) is the most allowance-efficient Go model.
+
+Before launching Go runs, check the window: `scripts/bench.sh --window` sums the allowance used in
+the last 5 hours. Add an estimate for each run you're about to launch (the median for that model
+and task size from `bench.sh`, or 5% while there's no data). Launch only while the total stays under
+15%; anything that doesn't fit goes to a ChatGPT Plus model or waits. `scripts/cost.sh` reports cost
+and allowance per run and model for any set of logs. When `run.sh` or `cost.sh` says a model is not
+in `go-limits.tsv`, refresh the table from https://opencode.ai/v2/docs/console/go/ first.
+
+### Trying new models
+
+The roster is the user's decision; the benchmark (below) informs it. A model joins only after a
+trial:
+
+- A trial model runs as an **extra contestant** beside the roster model on the same brief, or as
+  an **extra reviewer**. Its result is benchmarked and never merged unless it beats the roster
+  model's result in your review.
+- At most one trial run per task or per batch wave; skip trials when the 5-hour window is above 10%;
+  prefer Plus models and Go models with $60+ limits.
+- Trials only shadow tasks that touch no Never-change item and no protected path, because a winning
+  trial result gets merged and your review must be enough on its own there.
+- After 5+ benchmark records for a task type, show the user the numbers and let them decide whether
+  it joins the roster for that task type. Edit the roster table only on their say-so.
+
+Current trial group (from 2026-10-20): `openai/gpt-6-astra` (large and design-heavy, against
+gpt-6.1-sol), `openai/gpt-6-luna` (mechanical and tests), and on Go `minimax-m3`, `qwen3.7-plus`,
+`mimo-v2.6-flash` and `glm-5.3-flash` (general and fix-ups).
+
+Not for delegation: `jev-1.13` (OpenCode free tier). It is a judgment and classification model, not
+trained to generate text; a narrow classifier trial is parked in the skills repo's fog ledger.
+
 Rules of thumb from past runs (ha-spark, October 2026):
-- glm-5.2 on a large ticket can cost about $4 of Go allowance (#420, #422). For large tickets, use
+- glm-5.2 on a large ticket can cost about $4, 7% of the month (#420, #422). For large tickets, use
   gpt-6.1-sol on the flat-rate Plus quota and keep glm-5.2 for its review.
 - For reviews, deepseek-v4.1-flash cost about a sixth of glm-5.2 on the same brief ($0.09 against
-  $0.56, #438). Use it as an extra reviewer when the allowance is tight.
+  $0.56, #438), and a tenth of the allowance.
 - A glm-5.2 review of gpt-6.1-sol's work has found real bugs more than once (#421: four). Don't
   skip it on large tickets.
 

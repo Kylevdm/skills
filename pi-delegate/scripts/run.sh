@@ -20,6 +20,18 @@ LOG=$(dirname "$WT")/${4:-$(basename "$WT")}
 case "$MODEL" in
   openai/gpt-6-sol) echo "run.sh: openai/gpt-6-sol is never used for delegation" >&2; exit 2 ;;
   deepseek/*) echo "run.sh: direct deepseek/* spends paid credits; use opencode-go/* unless the user asked" >&2; exit 2 ;;
+  opencode-go/*)
+    # A $15-limit Go model burns the shared allowance four times faster than a
+    # $60 one. Set PI_DELEGATE_ALLOW_LOW_LIMIT=1 when the user asked for it.
+    limit=$(awk -F'\t' -v m="${MODEL#opencode-go/}" '!/^#/ && $1 == m {print $2}' \
+      "$(dirname "$0")/../assets/go-limits.tsv")
+    if [ -z "$limit" ]; then
+      echo "run.sh: ${MODEL#opencode-go/} is not in assets/go-limits.tsv; add its limit first" >&2; exit 2
+    fi
+    if [ "$limit" != free ] && [ "$limit" -le 15 ] && [ "${PI_DELEGATE_ALLOW_LOW_LIMIT:-}" != 1 ]; then
+      echo "run.sh: $MODEL has a \$$limit/month Go limit; avoid unless the user asked (PI_DELEGATE_ALLOW_LOW_LIMIT=1)" >&2
+      exit 2
+    fi ;;
 esac
 
 date +%s > "$LOG.start"

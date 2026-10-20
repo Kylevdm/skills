@@ -23,8 +23,10 @@ tickets in dependency order, carrying lessons forward, and reviewing the whole b
 
 ## 1. Set up once
 
-1. Read the spec and every ticket. Write down the dependency order: which tickets block which (the
-   tickets usually say; otherwise infer from what each one builds on).
+1. Read the spec and every ticket from the source of truth: the Wayfinder map or the spec's GitHub
+   issues, with their "Blocked by" links. Work out the dependency order and group it into waves,
+   with a model for each ticket. Show the user the waves once, before the first launch; that is the
+   only up-front confirmation.
 2. Create the integration branch and its worktree off the default branch:
    `git -C <repo> worktree add -b feat/<spec>-<slug> <worktree-dir>/<spec> origin/<default-branch>`.
 3. Write `preamble.md` from [../assets/batch-preamble.md](../assets/batch-preamble.md). Put everything
@@ -48,16 +50,26 @@ it introduced (functions, fields, files), the exact places the ticket touches wi
 evidence the jail can't fetch, and any line from `carry-forward.md` that applies. In #394 these
 notes carried most of each brief's ticket-specific value; the preamble alone is too general.
 
-Watch the allowance. Parallel glm-5.2 runs on large tickets can spend several dollars each against
-the 5-hour window; check `scripts/cost.sh <worktree-dir>/<spec>-*.pi.jsonl` between waves and move
-large tickets to gpt-6.1-sol (Plus quota). A 429 mid-wave means stop launching Go runs.
+Fit each wave to the Go window (SKILL.md, "The Go allowance"): `scripts/bench.sh --window` plus
+the estimate for the runs you're launching must stay under 15%. Large tickets go to gpt-6.1-sol on
+Plus by default; spread the rest across Go models so one model's spend doesn't dominate. Plus runs
+have no cap. A wave may carry one trial run (SKILL.md, "Trying new models") on a ticket that touches
+no Never-change item.
+
+Once the waves are confirmed, run the batch end to end without asking between waves; send the
+user a one-line update as each wave lands. Stop and ask only for:
+- a product decision a delegate raised, or one you can't make from the spec;
+- a 429, or a wave that can't fit the window and has no Plus fallback;
+- a ticket that has failed review twice.
 
 ## 3. Review and merge each ticket
 
 Review each ticket as in SKILL.md step 4: gates, whole diff, every Never-change item that the
-ticket goes near, scope. Then:
+ticket goes near, scope. When the ticket touches a Never-change item or is large, also run a
+delegated read-only review ([../assets/review-brief-template.md](../assets/review-brief-template.md))
+on a different model from the one that wrote it, and verify its findings. Then:
 
-- **Passes:** commit in the ticket worktree (`<type>(<area>): <summary> (#<N>)`), then merge into
+- **Passes:** record the outcome (SKILL.md, "Benchmark"), commit in the ticket worktree (`<type>(<area>): <summary> (#<N>)`), then merge into
   the integration branch from its worktree: `git merge --no-ff <spec>-<N> -m "Merge #<N> into
   <batch>"`. Run the gates on the integration worktree after each merge; a ticket that passes alone
   can still conflict in behaviour with its neighbours.

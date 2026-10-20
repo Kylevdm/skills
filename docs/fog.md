@@ -53,3 +53,11 @@ Wanted work outside every current map's destination and owned by nobody. An idea
 - **What it is.** Where it already touches the build, with evidence, when applicable.
   Which maps rule it out of scope, and what raised it. Trigger: none yet.
 -->
+
+- **JEV as a routing classifier for pi-delegate.** `jev-1.13-free` (OpenCode free tier, provider
+  `opencode`, not configured in pi) is a judgment and classification model, not a code generator
+  (https://docs.typesafe.ai/model-jaggedness/jev-1.13). It might label a ticket's task type and size
+  for routing, or filter files relevant to a brief. Raised while grilling the pi-delegate batch
+  route, 2026-10-20; `pi-delegate/SKILL.md` rules it out for delegation. Needs the user's call on
+  sending private repo text to a free tier. Trigger: `bench.sh` shows task type or size changes which
+  model wins, and labelling moves out of the orchestrator's context into something unattended.
