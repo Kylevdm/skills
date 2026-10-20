@@ -1,6 +1,6 @@
 ---
 name: pi-delegate
-description: Delegate coding work to cheaper models through pi inside pi-jail, while Claude stays the orchestrator that plans, briefs, reviews every diff, runs the gates and commits. Use when the user says "delegate #N", "send #N to pi", "delegate to gpt/glm/kimi", "bake off #N", "pi-jail", "hold the PR", or asks to hand an issue, fix, test-writing job or second-opinion review to another model to save Claude usage. Also use when deciding unprompted whether a task should be delegated or done directly.
+description: Delegate coding work to cheaper models through pi inside pi-jail, while Claude stays the orchestrator that plans, briefs, reviews every diff, runs the gates and commits. Use when the user says "delegate #N", "send #N to pi", "delegate to gpt/glm/kimi", "bake off #N", "delegate spec #N" or a whole map's tickets, "pi-jail", "hold the PR", or asks to hand an issue, fix, test-writing job or second-opinion review to another model to save Claude usage. Also use when deciding unprompted whether a task should be delegated or done directly.
 ---
 
 # pi delegation
@@ -20,6 +20,7 @@ conversation's context, or when it is security-critical.
 | "delegate #N" / "send #N to pi" | Full route below, model from the roster |
 | "delegate #N to gpt / glm / kimi" | Same, with that model |
 | "bake off #N" | Several models on the same brief in parallel; compare side by side |
+| "delegate spec #N" / "delegate the map" / a list of tickets | Batch route: [references/batch.md](references/batch.md) |
 | "do #N yourself" | No delegation |
 | "…, hold the PR" | Stop after review; the user approves before commit/PR |
 | nothing | Decide per task and say which route you picked and why |
@@ -55,6 +56,10 @@ Rules of thumb from past runs (ha-spark, October 2026):
   skip it on large tickets.
 
 ## The route
+
+This is the route for one task. For several tickets of one spec or map that land as one PR, read
+[references/batch.md](references/batch.md): it adds a shared brief built by `scripts/brief.sh`, an
+integration branch, dependency-ordered waves and a whole-batch review.
 
 ### 1. Read, then brief
 
