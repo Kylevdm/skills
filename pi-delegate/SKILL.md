@@ -46,6 +46,14 @@ conversation's context, or when it is security-critical.
 - pi's default model is `opencode-go/kimi-k2.7-code`, so a forgotten `--model` costs little, but pass
   it every time anyway.
 
+Rules of thumb from past runs (ha-spark, October 2026):
+- glm-5.2 on a large ticket can cost about $4 of Go allowance (#420, #422). For large tickets, use
+  gpt-6.1-sol on the flat-rate Plus quota and keep glm-5.2 for its review.
+- For reviews, deepseek-v4.1-flash cost about a sixth of glm-5.2 on the same brief ($0.09 against
+  $0.56, #438). Use it as an extra reviewer when the allowance is tight.
+- A glm-5.2 review of gpt-6.1-sol's work has found real bugs more than once (#421: four). Don't
+  skip it on large tickets.
+
 ## The route
 
 ### 1. Read, then brief
@@ -83,27 +91,45 @@ If the repo has code delegates must not touch (hardware control, safety guards, 
 notes), propose a list to the user and add it once they agree: one path per line relative to the
 repo root, trailing `/` for a directory, `#` comments allowed.
 
+When a ticket must change a protected path, the default is to do that part yourself: delegate the
+rest and tell the delegate the protected file is read-only. Lift a protect entry only when the user
+agrees, for one run: copy the list to `<worktree-dir>/protect-<repo-name>.orig`,
+remove only the entries the ticket needs, run, then restore the list from the copy
+straight away, before reviewing. Treat changes to that path with extra care in review, and tell the
+user in the report that the list was lifted and has been restored.
+
 ### 3. Run
 
 ```sh
-~/skills/pi-delegate/scripts/run.sh <worktree> <provider/model> <brief-file>
+~/skills/pi-delegate/scripts/run.sh <worktree> <provider/model> <brief-file> [log-name]
 ```
 
 It wraps `pi-jail <worktree> -p --mode json --no-session -na --model <model> "<brief>" </dev/null`,
-writes `<worktree>.pi.jsonl`, `.pi.err` and `.start` beside the worktree, and prints a summary
-(turns, tool calls, tokens, cost per model, wall time, the delegate's final message). Runs take
-from a few minutes to over half an hour, so launch it with `run_in_background` and wait for the exit
-notification rather than polling. If you call pi-jail directly, keep `</dev/null` (`pi -p` hangs on
-stdin otherwise) and pass the brief as an argument (the jail's `/tmp` is private). Re-summarise any
-log with `scripts/summarize.sh <log> [start-epoch]`.
+writes `<log>.pi.jsonl`, `.pi.err` and `.start` beside the worktree, and prints a summary (turns,
+tool calls, tokens, cost per model, wall time, the delegate's final message). The log name defaults
+to the worktree's name; give one whenever a worktree hosts more than one run (`416-review`,
+`438-glm`), or the second run overwrites the first one's log. Keep the brief files beside the logs.
+
+Runs take from a few minutes to over half an hour, so launch it with `run_in_background` and wait
+for the exit notification rather than polling. If you call pi-jail directly, keep `</dev/null`
+(`pi -p` hangs on stdin otherwise) and pass the brief as an argument (the jail's `/tmp` is private).
+Re-summarise any log with `scripts/summarize.sh <log> [start-epoch]`.
+
+**A run that dies on a provider error still exits 0 from pi.** `run.sh` checks for this and exits 3.
+The summary's `ERROR:` line says why. On `429 GoUsageLimitError` the OpenCode Go window is spent:
+don't retry. Move the run to `openai/gpt-6.1-sol` (Plus quota) if it suits the task, or tell the user
+when the window resets and ask.
 
 For a **bake off**, create one worktree per model (`<name>-glm`, `<name>-sol`, …), give each the
 same brief, launch all runs in the same turn, then compare the diffs side by side: correctness,
 whether each preserved the named safety properties, test quality, and cost.
 
-For a **second-opinion review**, put a worktree on the branch under review and brief the reviewer
-with the issue, the diff range (`git diff <base>...HEAD`), the safety properties, and an instruction
-to report findings without editing files.
+For a **second-opinion review**, put a worktree on the branch under review and start from
+[assets/review-brief-template.md](assets/review-brief-template.md). It works because it is narrow:
+read-only, the test suite run at most once, the exact diff range, the safety properties as a
+numbered list of rules to check line by line against the old path, and findings in a fixed shape
+(file:line, triggering input, what happens, what should happen, "no findings" per rule, no praise).
+Treat its findings like the delegate's summary, as claims you verify before fixing.
 
 ### 4. Review, outside the jail
 
@@ -124,8 +150,14 @@ runs are `--no-session`).
 
 Tell the user: what changed, your concerns, which safety properties you probed and how, wall time,
 and allowance used (OpenCode Go spend per model; OpenAI cost figures are notional because Plus is
-flat-rate). Then commit and open the PR from the worktree, unless they said "hold the PR". Remove the
-worktree once the PR is merged or abandoned (`git worktree remove`).
+flat-rate). Then commit and open the PR from the worktree, unless they said "hold the PR".
+
+### 6. Clean up
+
+Once the PR is merged or abandoned, remove its worktree (`git worktree remove <path>`, then
+`git branch -d <branch>`). Keep the logs and briefs; they are the cost record. At the start of each
+new delegation, run `git -C <repo> worktree list` and offer to remove any worktree whose branch is
+already on the default branch and has a clean status.
 
 ## Safety: don't weaken
 

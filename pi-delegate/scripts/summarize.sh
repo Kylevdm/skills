@@ -3,8 +3,9 @@
 #
 #   summarize.sh <run.pi.jsonl> [start-epoch]
 #
-# Prints model, turns, tool calls (and errors), tokens, cost per model and the
-# final assistant text. With a start epoch (date +%s at launch) it also prints
+# Prints model, turns, tool calls (and errors), tokens, cost per model, any
+# provider error that ended the run (e.g. a 429 usage limit) and the final
+# assistant text. With a start epoch (date +%s at launch) it also prints
 # wall time, measured to the log's last write.
 set -euo pipefail
 
@@ -17,6 +18,7 @@ jq -rs '
   | [.[] | select(.type == "tool_execution_end")] as $t
   | "models:      \([$a[] | "\(.provider)/\(.model)"] | unique | join(", "))",
     "turns:       \($a | length)  (last stop: \($a[-1].stopReason // "none"))",
+    ( $a[-1].errorMessage // empty | "ERROR:       \(.)" ),
     "tool calls:  \($t | length)  (errors: \([$t[] | select(.isError)] | length))",
     "tokens:      \([$a[].usage.totalTokens // 0] | add // 0) total, \([$a[].usage.output // 0] | add // 0) output",
     ( $a | group_by("\(.provider)/\(.model)")[]
