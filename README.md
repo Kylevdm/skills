@@ -11,6 +11,13 @@ maps in a repository fog ledger. See [fog/SKILL.md](fog/SKILL.md); the reasoning
 behind a standalone ledger is in
 [fog/docs/adr/0001-standalone-cross-map-fog-ledger.md](fog/docs/adr/0001-standalone-cross-map-fog-ledger.md).
 
+## pi-delegate
+
+Hand coding work to cheaper models through `pi` inside `pi-jail`, with Claude
+briefing, reviewing every diff, running the gates and committing. See
+[pi-delegate/SKILL.md](pi-delegate/SKILL.md); `scripts/run.sh` runs one jailed
+task and `scripts/summarize.sh` reports its cost and final message.
+
 ## Installing
 
 Symlink a skill into your Claude Code skills directory, so edits here are live
