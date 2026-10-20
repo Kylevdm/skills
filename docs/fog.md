@@ -53,5 +53,3 @@ Wanted work outside every current map's destination and owned by nobody. An idea
 - **What it is.** Where it already touches the build, with evidence, when applicable.
   Which maps rule it out of scope, and what raised it. Trigger: none yet.
 -->
-
-Fleet's deferred efforts moved to [`docs/fog.md` in `Kylevdm/pi-fleet`](https://github.com/Kylevdm/pi-fleet/blob/main/docs/fog.md) on 2026-09-24, beside the maps and code they index.
