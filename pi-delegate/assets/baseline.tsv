@@ -1,0 +1,4 @@
+# pi-delegate baseline scores, aggregated from the maintainer's local benchmark
+# (2026-10-20; bench.sh --export-baseline). No repos, issues or code.
+# Only cells with 7+ runs are published. score: 0-1, see bench.sh. allowance: median share of the OpenCode Go month (- for Plus).
+# kind	size	risk	model	runs	score	allowance	minutes

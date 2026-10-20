@@ -12,7 +12,7 @@
 #   role=implement|review|trial-implement|trial-review|prototype  brief=single|batch
 #   issue=<n>  task=feature|fix|tests|refactor|review|docs  size=S|M|L
 #   files=<n>  lines=<n> (changed, added+deleted; size S < 150, M < 500, L >= 500)
-#   touched_safety=true|false  attempt=<n>
+#   risk=low|medium|high  touched_safety=true|false  attempt=<n>
 #   outcome=merged|fixed-small|rerun|rejected  findings_real=<n>  findings_total=<n>
 #   safety_relaxed=true|false  backfilled=<comma-separated keys>
 # Values that parse as JSON (numbers, true/false) are stored as such; the rest as strings.
@@ -65,7 +65,7 @@ case "${1:-}" in
       [ "$k" != "$kv" ] || { echo "record.sh: expected key=value, got $kv" >&2; exit 2; }
       if [ "$k" = backfilled ]; then
         patch=$(jq -c --arg v "$v" '.backfilled = ($v | split(","))' <<<"$patch")
-      elif jq -e . >/dev/null 2>&1 <<<"$v"; then
+      elif jq . >/dev/null 2>&1 <<<"$v"; then
         patch=$(jq -c --arg k "$k" --argjson v "$v" '.[$k] = $v' <<<"$patch")
       else
         patch=$(jq -c --arg k "$k" --arg v "$v" '.[$k] = $v' <<<"$patch")

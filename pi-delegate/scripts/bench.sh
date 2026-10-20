@@ -2,24 +2,115 @@
 # bench.sh: report on the delegation benchmark (see record.sh).
 #
 #   bench.sh [--since YYYY-MM-DD] [--role implement|review|...]   per model, task type and size
+#   bench.sh --matrix [--no-baseline]                             score per size x risk, best models first
 #   bench.sh --window                                             Go allowance used, last 5 h and 7 days
+#   bench.sh --export-baseline                                    rewrite assets/baseline.tsv from local runs
 #
+# Scores (0-1): implementation runs score by outcome (merged 1, fixed-small 0.7,
+# rerun 0.3, rejected 0) and score 0 whenever safety_relaxed=true; reviews score
+# real findings / findings reported. --matrix blends local runs with the public
+# baseline in assets/baseline.tsv: a baseline cell weighs as up to 3 runs, one
+# less for each local run in that cell, so a new install starts from the
+# maintainer's numbers and its own runs take over.
 # Counts only runs recorded through run.sh / record.sh; Go spend from interactive
 # pi sessions or other tools is invisible here, so leave headroom.
 set -euo pipefail
 
 RUNS=${PI_DELEGATE_RUNS:-$HOME/.local/share/pi-delegate/runs.jsonl}
-[ -s "$RUNS" ] || { echo "bench.sh: no records yet in $RUNS" >&2; exit 1; }
+BASELINE=$(dirname "$0")/../assets/baseline.tsv
+[ -s "$RUNS" ] || [ "${1:-}" = --matrix ] || { echo "bench.sh: no records yet in $RUNS" >&2; exit 1; }
 
-python3 -I - "$RUNS" "$@" <<'PY'
-import json, statistics, sys
+python3 -I - "$RUNS" "$BASELINE" "$@" <<'PY'
+import json, os, statistics, sys
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-path, args = sys.argv[1], sys.argv[2:]
-runs = [json.loads(line) for line in open(path) if line.strip()]
+path, baseline_path, args = sys.argv[1], sys.argv[2], sys.argv[3:]
+runs = [json.loads(line) for line in open(path) if line.strip()] if os.path.exists(path) else []
 for r in runs:
     r["_start"] = datetime.fromisoformat(r["started"].replace("Z", "+00:00"))
+
+OUTCOME_SCORE = {"merged": 1.0, "fixed-small": 0.7, "rerun": 0.3, "rejected": 0.0}
+BASELINE_WEIGHT = 3
+MIN_PUBLIC_RUNS = 7
+SIZES, RISKS = ("S", "M", "L"), ("low", "medium", "high")
+
+def kind(r):
+    return "review" if r.get("role", "implement").endswith("review") else "implement"
+
+def score(r):
+    if kind(r) == "review":
+        real, total = r.get("findings_real"), r.get("findings_total")
+        return real / total if real is not None and total else None
+    if r.get("safety_relaxed") is True:
+        return 0.0
+    return OUTCOME_SCORE.get(r.get("outcome"))
+
+def med(values):
+    values = [v for v in values if v is not None]
+    return statistics.median(values) if values else None
+
+def fmt(value, spec, scale=1, suffix=""):
+    return "-" if value is None else f"{value * scale:{spec}}{suffix}"
+
+def mean_score(rs):
+    values = [v for v in map(score, rs) if v is not None]
+    return statistics.mean(values) if values else None
+
+def cells(rs):
+    """(kind, size, risk, model) -> scored runs, for the matrix and the baseline."""
+    out = defaultdict(list)
+    for r in rs:
+        if score(r) is not None:
+            out[(kind(r), r.get("size", "-"), r.get("risk", "-"), f'{r["provider"]}/{r["model"]}')].append(r)
+    return out
+
+if args[:1] == ["--export-baseline"]:
+    with open(baseline_path, "w") as f:
+        f.write("# pi-delegate baseline scores, aggregated from the maintainer's local benchmark\n"
+                f"# ({datetime.now(timezone.utc):%Y-%m-%d}; bench.sh --export-baseline). No repos, issues or code.\n"
+                f"# Only cells with {MIN_PUBLIC_RUNS}+ runs are published. score: 0-1, see bench.sh. allowance: median share of the OpenCode Go month (- for Plus).\n"
+                "# kind\tsize\trisk\tmodel\truns\tscore\tallowance\tminutes\n")
+        for (k, size, risk, model), rs in sorted(cells(runs).items()):
+            if len(rs) < MIN_PUBLIC_RUNS or (k == "implement" and "-" in (size, risk)):
+                continue
+            f.write("\t".join((k, size, risk, model, str(len(rs)),
+                               f"{mean_score(rs):.2f}",
+                               fmt(med([r["allowance"] for r in rs]), ".4f"),
+                               fmt(med([r["wall_s"] for r in rs]), ".0f", 1 / 60))) + "\n")
+    print(f"wrote {os.path.normpath(baseline_path)}; review the diff before committing it")
+    sys.exit(0)
+
+if args[:1] == ["--matrix"]:
+    base = {}
+    if "--no-baseline" not in args and os.path.exists(baseline_path):
+        for line in open(baseline_path):
+            if line.strip() and not line.startswith("#"):
+                k, size, risk, model, n, sc, allow, _ = line.rstrip("\n").split("\t")
+                base[(k, size, risk, model)] = (int(n), float(sc),
+                                                None if allow == "-" else float(allow))
+    local = cells(runs)
+    def entry(key):
+        rs = local.get(key, [])
+        n, sc, allow = base.get(key, (0, 0.0, None))
+        w = max(0, min(n, BASELINE_WEIGHT) - len(rs))
+        blended = (w * sc + sum(score(r) for r in rs)) / (w + len(rs))
+        allow = med([r["allowance"] for r in rs]) if rs else allow
+        cost = "Plus" if key[3].startswith("openai/") else fmt(allow, ".1f", 100, "%")
+        return blended, f"{key[3]} {blended:.2f} (n {len(rs)}{f' +{w} base' if w else ''}, {cost})"
+    for k, rows in (("implement", [(s, r) for s in SIZES for r in RISKS]), ("review", None)):
+        keys = set(local) | set(base)
+        if rows is None:
+            rows = sorted({(key[1], key[2]) for key in keys if key[0] == k})
+        print(f"{k} score by size/risk, best first (n local runs +baseline weight, median Go allowance)")
+        for size, risk in rows:
+            found = sorted((entry(key) for key in keys if key[:3] == (k, size, risk)), reverse=True)
+            print(f"  {size}/{risk:7} " + ("   ".join(text for _, text in found[:3]) or "no data"))
+        print()
+    unrisked = sum(1 for r in runs if kind(r) == "implement" and score(r) is not None and "risk" not in r)
+    if unrisked:
+        print(f"{unrisked} scored implement run(s) have no risk and sit outside the matrix: record.sh set <id> risk=...")
+    sys.exit(0)
 
 if args[:1] == ["--window"]:
     now = datetime.now(timezone.utc)
@@ -43,19 +134,12 @@ while args:
         sys.exit(f"bench.sh: unknown option {flag}")
 runs = [r for r in runs if (since is None or r["_start"] >= since) and (role is None or r.get("role") == role)]
 
-def med(values):
-    values = [v for v in values if v is not None]
-    return statistics.median(values) if values else None
-
-def fmt(value, spec, scale=1, suffix=""):
-    return "-" if value is None else f"{value * scale:{spec}}{suffix}"
-
 groups = defaultdict(list)
 for r in runs:
     groups[(f'{r["provider"]}/{r["model"]}', r.get("task", "?"), r.get("size", "?"))].append(r)
 
 header = ("model", "task", "size", "runs", "merged", "fixed", "rerun", "reject", "relaxed",
-          "findings", "med $", "med allow", "med min")
+          "findings", "score", "med $", "med allow", "med min")
 rows = [header]
 for (model, task, size), rs in sorted(groups.items()):
     outcomes = [r.get("outcome") for r in rs]
@@ -67,6 +151,7 @@ for (model, task, size), rs in sorted(groups.items()):
                  str(outcomes.count("rerun")), str(outcomes.count("rejected")),
                  str(sum(1 for r in rs if r.get("safety_relaxed") is True)),
                  f"{real}/{total}" if total else "-",
+                 fmt(mean_score(rs), ".2f"),
                  fmt(med([r["cost_usd"] for r in rs]), ".2f"),
                  fmt(med([r["allowance"] for r in rs]), ".1f", 100, "%"),
                  fmt(med([r["wall_s"] for r in rs]), ".0f", 1 / 60)))

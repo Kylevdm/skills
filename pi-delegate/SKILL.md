@@ -211,20 +211,24 @@ already on the default branch and has a clean status.
 Every run `run.sh` launches appends an anonymised record to `~/.local/share/pi-delegate/runs.jsonl`
 (model, cost, allowance, wall time, turns, tool errors, provider error kind). It lives outside every
 repo, and the skills repo is public. A record never holds code, brief text, paths or delegate
-output; repo label and issue number are enough to trace it back locally.
+output; repo label and issue number are enough to trace it back locally. Only aggregated scores are
+published, in [assets/baseline.tsv](assets/baseline.tsv) (see "Scores" below).
 
 The metrics are only half of it. After review, add the outcome, since that's what makes it a
 benchmark rather than a cost log:
 
 ```sh
-scripts/record.sh set <id> role=implement brief=single issue=421 task=feature size=L files=9 \
-  lines=640 touched_safety=true attempt=1 outcome=fixed-small safety_relaxed=false
+scripts/record.sh set <id> role=implement brief=single issue=421 task=feature size=L risk=high \
+  files=9 lines=640 touched_safety=true attempt=1 outcome=fixed-small safety_relaxed=false
 scripts/record.sh set <id> role=review issue=421 task=review findings_real=4 findings_total=6
 ```
 
 - `outcome`: `merged` (as delivered), `fixed-small` (you fixed small things), `rerun` (needed
   another attempt), `rejected`.
 - `size` by lines changed (added + deleted): S < 150, M < 500, L ≥ 500.
+- `risk` by what the change could break: `low` touches no named safety property or protected path;
+  `medium` changes code a named safety property runs through, or shared code many features use;
+  `high` changes a guard, fail-closed path, protected path, auth or hardware control itself.
 - `safety_relaxed=true` whenever the delegate loosened, bypassed or dropped an existing guard or
   protection, even if you caught it. It is the most important field.
 - Reviews: `findings_real` is what survived your verification, out of `findings_total` reported.
@@ -238,6 +242,23 @@ holds across 5+ runs of a model for a task type, propose the roster change to th
 runs of 2026-10-18/19 are backfilled from session reports and git (`backfilled` lists which fields
 were reconstructed). `bench.sh` sees only recorded runs, so Go spend from anything else is
 invisible to `--window`: leave headroom.
+
+### Scores
+
+Each recorded run gets a score from 0 to 1. An implementation scores by outcome (merged 1,
+fixed-small 0.7, rerun 0.3, rejected 0), and scores 0 whenever `safety_relaxed=true`. A review
+scores real findings ÷ findings reported. `scripts/bench.sh --matrix` is the decision matrix: for
+each size (S/M/L) × risk (low/medium/high) cell it lists the best-scoring models with their run
+count and median Go allowance. Pick from the cell for the task in hand, preferring the cheaper model
+when scores are close. The roster stays the default where the matrix has no data.
+
+`--matrix` blends local runs with the public baseline, so a new install isn't starting from
+nothing: a baseline cell counts as up to 3 runs, one less for each local run in that cell, until
+local data takes over (`--no-baseline` shows local runs alone). After a batch or when the matrix
+has shifted, refresh the baseline with `scripts/bench.sh --export-baseline`, read the diff and
+commit it. The export holds kind, size, risk, model, run count, mean score, median allowance and
+minutes per cell, and nothing that identifies a repo, issue or run. A cell is published only once
+it has 7+ runs, so one-off results never become someone else's starting point.
 
 ## Safety: don't weaken
 
