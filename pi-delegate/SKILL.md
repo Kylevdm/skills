@@ -275,5 +275,15 @@ it has 7+ runs, so one-off results never become someone else's starting point.
   before delegating.
 - Delegates never get credentials, never commit or push, and never touch hardware or live services.
   Don't paste secrets or tokens into a brief.
+- **Running pi-jail from Claude Code:** Claude Code's Linux sandbox is bubblewrap too and blocks the
+  nested user namespace, so `run.sh` exits 4 (`bwrap: setting up uid map: Permission denied`).
+  pi-jail is the containment layer, so it runs outside Claude's sandbox. The user's settings exclude
+  it (`sandbox.excludedCommands`). If `run.sh` still exits 4, stop and tell the user. Don't retry
+  with `dangerouslyDisableSandbox` or look for another way round it.
+- **bwrap fails in a plain terminal too:** that's the host's AppArmor, not Claude. On 2026-10-20 a
+  `system-bwrap` profile in `/etc/apparmor.d/codex-bwrap` blocked bwrap's user namespace. The user
+  removed it and reloaded `codex-bwrap` and `bwrap-userns-restrict`; backup at `~/codex-bwrap.bak`.
+  A Codex or `apparmor` package update can restore it, so check there first after upgrades. This
+  needs sudo: tell the user, don't edit AppArmor yourself.
 - Never run jail-escape or write probes outside the jail. A 2026-10-18 control run clobbered pi's
   settings that way. If you need to test the jail, do it inside `pi-jail`.

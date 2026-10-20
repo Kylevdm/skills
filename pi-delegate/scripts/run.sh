@@ -33,6 +33,12 @@ case "$MODEL" in
       exit 2
     fi ;;
 esac
+# bwrap can't create a user namespace inside Claude Code's own (bubblewrap)
+# sandbox. Fail here, before a log or an empty benchmark record is written.
+if ! bwrap --ro-bind / / true 2>/dev/null; then
+  echo "run.sh: bwrap can't start here (inside Claude Code's sandbox?); run.sh must run unsandboxed, see SKILL.md \"Running pi-jail from Claude Code\"" >&2
+  exit 4
+fi
 
 date +%s > "$LOG.start"
 # pi-jail's /tmp is private, so the brief travels as an argument. </dev/null
