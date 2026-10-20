@@ -45,6 +45,10 @@ pi-jail "$WT" -p --mode json --no-session -na --model "$MODEL" "$(cat "$BRIEF")"
   || status=$?
 
 "$(dirname "$0")/summarize.sh" "$LOG.pi.jsonl" "$(cat "$LOG.start")"
+echo
+REPO=$(basename "$(dirname "$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir)")")
+"$(dirname "$0")/record.sh" add "$LOG.pi.jsonl" "$(cat "$LOG.start")" "$REPO" \
+  || echo "run.sh: benchmark record failed; add it with record.sh add" >&2
 if [ "$status" -ne 0 ]; then
   echo; echo "pi-jail exited $status; stderr tail:"; tail -20 "$LOG.pi.err"
   exit "$status"

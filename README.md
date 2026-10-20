@@ -16,7 +16,8 @@ behind a standalone ledger is in
 Hand coding work to cheaper models through `pi` inside `pi-jail`, with Claude
 briefing, reviewing every diff, running the gates and committing. See
 [pi-delegate/SKILL.md](pi-delegate/SKILL.md); `scripts/run.sh` runs one jailed
-task, `scripts/summarize.sh` reports its cost and final message, and
+task and records it in a local benchmark (`scripts/bench.sh` reports on it),
+`scripts/summarize.sh` reports a run's cost and final message, and
 [references/batch.md](pi-delegate/references/batch.md) covers delegating a
 whole spec's tickets onto one integration branch.
 

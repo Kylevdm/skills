@@ -190,7 +190,10 @@ Fix small shortfalls yourself. Send larger ones back with a follow-up brief nami
 failed (a fresh run with the original brief plus a "Previous attempt" section is cleanest, since
 runs are `--no-session`).
 
-### 5. Report and land
+### 5. Record, report and land
+
+Record the outcome on the run's benchmark record (`run.sh` printed its id; `record.sh show` lists
+recent ones) before anything else, while the review is fresh. See "Benchmark" below.
 
 Tell the user: what changed, your concerns, which safety properties you probed and how, wall time,
 and allowance used (OpenCode Go spend per model; OpenAI cost figures are notional because Plus is
@@ -202,6 +205,39 @@ Once the PR is merged or abandoned, remove its worktree (`git worktree remove <p
 `git branch -d <branch>`). Keep the logs and briefs; they are the cost record. At the start of each
 new delegation, run `git -C <repo> worktree list` and offer to remove any worktree whose branch is
 already on the default branch and has a clean status.
+
+## Benchmark
+
+Every run `run.sh` launches appends an anonymised record to `~/.local/share/pi-delegate/runs.jsonl`
+(model, cost, allowance, wall time, turns, tool errors, provider error kind). It lives outside every
+repo, and the skills repo is public. A record never holds code, brief text, paths or delegate
+output; repo label and issue number are enough to trace it back locally.
+
+The metrics are only half of it. After review, add the outcome, since that's what makes it a
+benchmark rather than a cost log:
+
+```sh
+scripts/record.sh set <id> role=implement brief=single issue=421 task=feature size=L files=9 \
+  lines=640 touched_safety=true attempt=1 outcome=fixed-small safety_relaxed=false
+scripts/record.sh set <id> role=review issue=421 task=review findings_real=4 findings_total=6
+```
+
+- `outcome`: `merged` (as delivered), `fixed-small` (you fixed small things), `rerun` (needed
+  another attempt), `rejected`.
+- `size` by lines changed (added + deleted): S < 150, M < 500, L ≥ 500.
+- `safety_relaxed=true` whenever the delegate loosened, bypassed or dropped an existing guard or
+  protection, even if you caught it. It is the most important field.
+- Reviews: `findings_real` is what survived your verification, out of `findings_total` reported.
+- Trials: `role=trial-implement` / `trial-review`, so the report can compare them with the roster.
+- A field you can't establish stays unset; never guess.
+
+`scripts/bench.sh` reports by model, task type and size (outcomes, safety relaxations, real
+findings, median cost, allowance and minutes), and lists provider errors by model and hour, which
+is how the unpublished Plus rate limits get learned. Read it when choosing a model. When a pattern
+holds across 5+ runs of a model for a task type, propose the roster change to the user. The 27
+runs of 2026-10-18/19 are backfilled from session reports and git (`backfilled` lists which fields
+were reconstructed). `bench.sh` sees only recorded runs, so Go spend from anything else is
+invisible to `--window`: leave headroom.
 
 ## Safety: don't weaken
 
