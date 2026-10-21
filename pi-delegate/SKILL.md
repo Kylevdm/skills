@@ -35,7 +35,11 @@ conversation's context, or when it is security-critical.
 | Cheap, fast, large-context sweeps; extra reviewer when allowance is tight | `opencode-go/deepseek-v4.1-flash` |
 | Throwaway prototypes | `opencode-go/longcat-2.5-preview-free` |
 
-- When reviewing gpt-6.1-sol's own output, use glm-5.2, so it isn't grading itself.
+- Reviews: the primary safety reviewer is a Plus model that didn't write the code, so nothing grades
+  itself: `openai/gpt-6-astra` reviews gpt-6.1-sol's work, and gpt-6.1-sol reviews astra's or a Go
+  model's. glm-5.2 and deepseek-v4.1-flash are extra reviewers, or cheap spec reviewers.
+- Follow-up fixes from review go to gpt-6.1-sol or astra in a brief, unless writing the brief costs
+  about as much as the fix or the code is protect-listed.
 - **Never** `openai/gpt-6-sol`. **Never** direct `deepseek/*` (paid credits; OpenCode Go serves the
   same models).
 - **Avoid unless asked:** any Go model with a $15 monthly limit (see
@@ -44,8 +48,10 @@ conversation's context, or when it is security-critical.
   models are also on ChatGPT Plus, so use them only as `openai/gpt-6-luna` / `openai/gpt-5.6-luna`.
   `scripts/run.sh` refuses all of these; `PI_DELEGATE_ALLOW_LOW_LIMIT=1` overrides when the user asked.
 - ChatGPT Plus accepts gpt-6.1-sol, gpt-6-astra, gpt-6-luna, gpt-5.6-sol, gpt-5.6-terra and
-  gpt-5.6-luna (checked 2026-10-20); gpt-5.5, gpt-5.3-codex and gpt-5.4-mini return 400. Plus caps per
-  model aren't published: use it freely and back off on a rate-limit error.
+  gpt-5.6-luna (checked 2026-10-20); gpt-5.5, gpt-5.3-codex and gpt-5.4-mini return 400. Plus is
+  flat-rate and the Go allowance is the scarce one, so prefer Plus wherever it suits the task. Its
+  per-model caps aren't published: back off only on a Plus rate-limit error or when the user says
+  the window is nearly full, not on usage figures alone.
 - pi's default model is `opencode-go/kimi-k2.7-code`, so a forgotten `--model` costs little, but pass
   it every time anyway.
 
@@ -79,8 +85,8 @@ trial:
 - After 5+ benchmark records for a task type, show the user the numbers and let them decide whether
   it joins the roster for that task type. Edit the roster table only on their say-so.
 
-Current trial group (from 2026-10-20): `openai/gpt-6-astra` (large and design-heavy, against
-gpt-6.1-sol), `openai/gpt-6-luna` (mechanical and tests), and on Go `minimax-m3`, `qwen3.7-plus`,
+Current trial group (from 2026-10-20): `openai/gpt-6-astra` for implementation (large and
+design-heavy, against gpt-6.1-sol; its reviews joined the roster on 2026-10-21 at the user's say-so), `openai/gpt-6-luna` (mechanical and tests), and on Go `minimax-m3`, `qwen3.7-plus`,
 `mimo-v2.6-flash` and `glm-5.3-flash` (general and fix-ups).
 
 Not for delegation: `jev-1.13` (OpenCode free tier). It is a judgment and classification model, not
@@ -88,11 +94,13 @@ trained to generate text; a narrow classifier trial is parked in the skills repo
 
 Rules of thumb from past runs (ha-spark, October 2026):
 - glm-5.2 on a large ticket can cost about $4, 7% of the month (#420, #422). For large tickets, use
-  gpt-6.1-sol on the flat-rate Plus quota and keep glm-5.2 for its review.
+  gpt-6.1-sol on the flat-rate Plus quota and gpt-6-astra for its review.
 - For reviews, deepseek-v4.1-flash cost about a sixth of glm-5.2 on the same brief ($0.09 against
   $0.56, #438), and a tenth of the allowance.
-- A glm-5.2 review of gpt-6.1-sol's work has found real bugs more than once (#421: four). Don't
-  skip it on large tickets.
+- A glm-5.2 review of gpt-6.1-sol's work has found real bugs more than once (#421: four). Keep it as
+  an extra reviewer on large tickets while the Go window allows.
+- gpt-6-astra was the strongest reviewer of the #409 batch C: three real findings out of three,
+  including a mid-tick config save slipping past the stale-settings check.
 - On a whole-batch safety review of gpt-6.1-sol's work (#409 batch C), trial reviewer
   gpt-6-astra found 3 real issues in 2.5 minutes on Plus, two of which glm-5.2 missed on the same
   brief. One trial so far: run it beside the roster reviewer until it has 5+ records.

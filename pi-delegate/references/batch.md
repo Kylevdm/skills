@@ -89,8 +89,8 @@ reviewing, so you review it against what it will land on.
 
 When every ticket is merged, review `git diff <default-branch>...feat/<spec>-<slug>` as one change.
 Tickets reviewed one at a time miss what only shows when they combine. Run two read-only reviews in
-parallel from [../assets/review-brief-template.md](../assets/review-brief-template.md), on a model
-that did not write most of the batch:
+parallel from [../assets/review-brief-template.md](../assets/review-brief-template.md), on models
+that did not write most of the batch, with the safety review on a Plus model (see SKILL.md "Roster"):
 
 - **Spec:** does the batch meet every acceptance criterion of every ticket and the spec?
 - **Safety and standards:** every Never-change item, line by line against the default branch, plus
