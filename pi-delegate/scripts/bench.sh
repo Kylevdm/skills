@@ -8,7 +8,9 @@
 #
 # Scores (0-1): implementation runs score by outcome (merged 1, fixed-small 0.7,
 # rerun 0.3, rejected 0) and score 0 whenever safety_relaxed=true; reviews score
-# real findings / findings reported. --matrix blends local runs with the public
+# real findings / findings reported. A run is unscored when it ended on a provider
+# error or its cause is not the model (cause=provider|brief|setup): a usage limit,
+# a gap in the brief or a setup mistake says nothing about the model's work. --matrix blends local runs with the public
 # baseline in assets/baseline.tsv: a baseline cell weighs as up to 3 runs, one
 # less for each local run in that cell, so a new install starts from the
 # maintainer's numbers and its own runs take over.
@@ -34,11 +36,17 @@ OUTCOME_SCORE = {"merged": 1.0, "fixed-small": 0.7, "rerun": 0.3, "rejected": 0.
 BASELINE_WEIGHT = 3
 MIN_PUBLIC_RUNS = 7
 SIZES, RISKS = ("S", "M", "L"), ("low", "medium", "high")
+NOT_MODEL = {"provider", "brief", "setup"}
 
 def kind(r):
     return "review" if r.get("role", "implement").endswith("review") else "implement"
 
+def excused(r):
+    return bool(r.get("error")) or r.get("cause") in NOT_MODEL
+
 def score(r):
+    if excused(r):
+        return None
     if kind(r) == "review":
         real, total = r.get("findings_real"), r.get("findings_total")
         return real / total if real is not None and total else None
@@ -139,7 +147,7 @@ for r in runs:
     groups[(f'{r["provider"]}/{r["model"]}', r.get("task", "?"), r.get("size", "?"))].append(r)
 
 header = ("model", "task", "size", "runs", "merged", "fixed", "rerun", "reject", "relaxed",
-          "findings", "score", "med $", "med allow", "med min")
+          "findings", "excused", "score", "med $", "med allow", "med min")
 rows = [header]
 for (model, task, size), rs in sorted(groups.items()):
     outcomes = [r.get("outcome") for r in rs]
@@ -151,6 +159,7 @@ for (model, task, size), rs in sorted(groups.items()):
                  str(outcomes.count("rerun")), str(outcomes.count("rejected")),
                  str(sum(1 for r in rs if r.get("safety_relaxed") is True)),
                  f"{real}/{total}" if total else "-",
+                 str(sum(1 for r in rs if excused(r))),
                  fmt(mean_score(rs), ".2f"),
                  fmt(med([r["cost_usd"] for r in rs]), ".2f"),
                  fmt(med([r["allowance"] for r in rs]), ".1f", 100, "%"),
@@ -162,6 +171,9 @@ for row in rows:
 unlabelled = sum(1 for r in runs if "outcome" not in r and r.get("role", "implement") != "review")
 if unlabelled:
     print(f"\n{unlabelled} run(s) have no outcome yet: record.sh set <id> outcome=...")
+uncaused = sum(1 for r in runs if r.get("outcome") in ("rerun", "rejected") and "cause" not in r and not r.get("error"))
+if uncaused:
+    print(f"\n{uncaused} rerun/rejected run(s) have no cause and score against the model: record.sh set <id> cause=...")
 
 errors = [r for r in runs if r.get("error")]
 if errors:

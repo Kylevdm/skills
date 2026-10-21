@@ -225,6 +225,12 @@ scripts/record.sh set <id> role=review issue=421 task=review findings_real=4 fin
 
 - `outcome`: `merged` (as delivered), `fixed-small` (you fixed small things), `rerun` (needed
   another attempt), `rejected`.
+- `cause` on every `rerun` or `rejected`: `model` (its work fell short), `provider` (usage or
+  rate limit, outage), `brief` (the brief was wrong or silent, including a correct stop at a
+  blocker the brief told it to raise) or `setup` (your mistake, such as a protect list not lifted).
+  Only `model` scores. A run that ended on a provider error is unscored whatever its cause, and a
+  rerun with no cause scores against the model until you set one. Excused runs still count for
+  cost and `--window`.
 - `size` by lines changed (added + deleted): S < 150, M < 500, L ≥ 500.
 - `risk` by what the change could break: `low` touches no named safety property or protected path;
   `medium` changes code a named safety property runs through, or shared code many features use;

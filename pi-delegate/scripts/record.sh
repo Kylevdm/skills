@@ -14,6 +14,7 @@
 #   files=<n>  lines=<n> (changed, added+deleted; size S < 150, M < 500, L >= 500)
 #   risk=low|medium|high  touched_safety=true|false  attempt=<n>
 #   outcome=merged|fixed-small|rerun|rejected  findings_real=<n>  findings_total=<n>
+#   cause=model|provider|brief|setup (why a run was rerun or rejected; only model scores)
 #   safety_relaxed=true|false  backfilled=<comma-separated keys>
 # Values that parse as JSON (numbers, true/false) are stored as such; the rest as strings.
 set -euo pipefail
@@ -80,5 +81,5 @@ case "${1:-}" in
     tail -n "${2:-10}" "$RUNS" | jq -c .
     ;;
   *)
-    sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
