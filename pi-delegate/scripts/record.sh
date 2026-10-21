@@ -3,7 +3,7 @@
 #
 #   record.sh add <run.pi.jsonl> <start-epoch> <repo-label> [log-label]
 #                                                              append a run's metrics (run.sh does this)
-#   record.sh set <id> key=value...                            add review outcomes to a record
+#   record.sh set <id|start-epoch> key=value...               add review outcomes to a record
 #   record.sh show [n]                                         print the last n records (default 10)
 #
 # Records live in ${PI_DELEGATE_RUNS:-~/.local/share/pi-delegate/runs.jsonl}, outside
@@ -59,6 +59,16 @@ case "${1:-}" in
   set)
     [ $# -ge 3 ] || { echo "usage: record.sh set <id> key=value..." >&2; exit 2; }
     ID=$2; shift 2
+    if [[ $ID =~ ^[0-9]+$ ]]; then
+      # A bare start epoch names its run when only one run started then; batch waves share one.
+      matches=$(jq -r --arg s "@$ID" 'select(.id | endswith($s)) | .id' "$RUNS")
+      case $(grep -c . <<<"$matches") in
+        0) echo "record.sh: no record started at $ID" >&2; exit 2 ;;
+        1) ID=$matches ;;
+        *) echo "record.sh: several runs started at $ID; use the full id:" >&2
+           sed 's/^/  /' <<<"$matches" >&2; exit 2 ;;
+      esac
+    fi
     grep -qF "\"id\":\"$ID\"" "$RUNS" || { echo "record.sh: no record $ID" >&2; exit 2; }
     patch='{}'
     for kv in "$@"; do
