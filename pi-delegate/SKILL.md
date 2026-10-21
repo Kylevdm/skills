@@ -93,6 +93,14 @@ Rules of thumb from past runs (ha-spark, October 2026):
   $0.56, #438), and a tenth of the allowance.
 - A glm-5.2 review of gpt-6.1-sol's work has found real bugs more than once (#421: four). Don't
   skip it on large tickets.
+- On a whole-batch safety review of gpt-6.1-sol's work (#409 batch C), trial reviewer
+  gpt-6-astra found 3 real issues in 2.5 minutes on Plus, two of which glm-5.2 missed on the same
+  brief. One trial so far: run it beside the roster reviewer until it has 5+ records.
+- Plus was not the constraint: four gpt-6.1-sol runs plus one gpt-6-astra review used 38% of the
+  Plus 5-hour window. Spend Plus before Go, which is the summed, scarce allowance.
+- Your own notes are part of the safety surface. A design instruction in a brief ("re-enter
+  `context.planning()` after a save") caused a stale-config bypass that a reviewer then had to find.
+  When notes prescribe how a fence is re-captured or skipped, list that as a rule for the reviewer.
 
 ## The route
 
