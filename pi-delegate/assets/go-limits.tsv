@@ -1,5 +1,5 @@
 # OpenCode Go monthly limits (Go plan, not Go Plus), from https://opencode.ai/v2/docs/console/go/
-# Checked 2026-10-20. A run uses spend / limit of the allowance; fractions add up across models.
+# Checked 2026-10-25. A run uses spend / limit of the allowance; fractions add up across models.
 # Windows: 5 h = 20%, week = 50%, month = 100% of the summed allowance.
 # limit "free" = unlimited free model (counts 0). Refresh when a model isn't listed.
 # model	monthly_usd	note
@@ -9,8 +9,9 @@ glm-5.2	60
 kimi-k3	15
 kimi-k2.7-code	60
 longcat-2.0	60
-longcat-2.5-preview-free	free	limited time
-step-5-preview	60	4x for a limited time; normally 15
+longcat-2.5-preview-free	free	gone from the Go page 2026-10-25; still in pi's catalogue
+beam-free	free	limited time, limited regions; not yet in pi's catalogue
+step-5-preview	15	$60 promotion ended by 2026-10-25
 mimo-v2.6-flash	60
 mimo-v2.6-pro	15
 mimo-v2.5	60
@@ -29,4 +30,4 @@ grok-4.7	15
 gpt-6-luna	15	also on ChatGPT Plus: use openai/gpt-6-luna
 gpt-5.6-luna	15	also on ChatGPT Plus: use openai/gpt-5.6-luna
 claude-haiku-5-5	15
-gemini-4-argon-contributor	60	2x for a limited time; normally 30
+gemini-4-argon	30	tokens 50% off until 2026-11-30

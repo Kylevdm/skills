@@ -33,7 +33,7 @@ conversation's context, or when it is security-critical.
 | Larger multi-file or design-heavy work; second-opinion reviews | `openai/gpt-6.1-sol` (ChatGPT Plus quota) |
 | Mechanical edits, writing tests, lint/type fix-ups | `opencode-go/kimi-k2.7-code` |
 | Cheap, fast, large-context sweeps; extra reviewer when allowance is tight | `opencode-go/deepseek-v4.1-flash` |
-| Throwaway prototypes | `opencode-go/longcat-2.5-preview-free` |
+| Throwaway prototypes | `opencode-go/longcat-2.5-preview-free` while pi still serves it; then `opencode-go/beam-free` |
 
 - Reviews: the primary safety reviewer is a Plus model that didn't write the code, so nothing grades
   itself: `openai/gpt-6-astra` reviews gpt-6.1-sol's work, and gpt-6.1-sol reviews astra's or a Go
@@ -42,6 +42,8 @@ conversation's context, or when it is security-critical.
   about as much as the fix or the code is protect-listed.
 - **Never** `openai/gpt-6-sol`. **Never** direct `deepseek/*` (paid credits; OpenCode Go serves the
   same models).
+  **Never** a `*-contributor` Go model (Muse Spark and similar): its terms let the vendor train on
+  every prompt and completion, so the brief and the code would leave your control.
 - **Avoid unless asked:** any Go model with a $15 monthly limit (see
   [assets/go-limits.tsv](assets/go-limits.tsv)): Kimi K3, Grok 4.7, Qwen3.8 Max, GLM-5.3, DeepSeek V4
   Pro, MiMo Pro, Claude Haiku. They use the allowance four times faster than a $60 model. The luna
@@ -85,9 +87,16 @@ trial:
 - After 5+ benchmark records for a task type, show the user the numbers and let them decide whether
   it joins the roster for that task type. Edit the roster table only on their say-so.
 
-Current trial group (from 2026-10-20): `openai/gpt-6-astra` for implementation (large and
-design-heavy, against gpt-6.1-sol; its reviews joined the roster on 2026-10-21 at the user's say-so), `openai/gpt-6-luna` (mechanical and tests), and on Go `minimax-m3`, `qwen3.7-plus`,
-`mimo-v2.6-flash` and `glm-5.3-flash` (general and fix-ups).
+Current trial group (from 2026-10-20, revised 2026-10-25): `openai/gpt-6-astra` for implementation
+(large and design-heavy, against gpt-6.1-sol; its reviews joined the roster on 2026-10-21 at the
+user's say-so), and on Go `glm-5.3-flash` for implementation (shadowing glm-5.2; 63% on the DeepSWE
+leaderboard against glm-5.2's 44%, at a fraction of the cost) and `mimo-v2.6-flash` (general,
+fix-ups and mechanical; watch its wall time). Dropped 2026-10-25 at the user's say-so:
+`qwen3.7-plus` (weak implementation), `minimax-m3` and `glm-5.3-flash` as reviewers (below
+deepseek-v4.1-flash for more allowance), `step-5-preview` (its $60 promotion ended; now $15),
+and `openai/gpt-6-luna` (four implementation shadows on ha-spark #478–#484 scored 0, 0, 0.3, 0: it
+gave up early, left broken trees or rewrote the golden fixture in its test). Research on the other
+Go models, with verdicts: [references/go-models.md](references/go-models.md).
 
 Not for delegation: `jev-1.13` (OpenCode free tier). It is a judgment and classification model, not
 trained to generate text; a narrow classifier trial is parked in the skills repo's fog ledger.

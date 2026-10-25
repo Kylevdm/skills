@@ -19,6 +19,7 @@ LOG=$(dirname "$WT")/${4:-$(basename "$WT")}
 [ -s "$BRIEF" ] || { echo "run.sh: brief $BRIEF is empty or missing" >&2; exit 2; }
 case "$MODEL" in
   openai/gpt-6-sol) echo "run.sh: openai/gpt-6-sol is never used for delegation" >&2; exit 2 ;;
+  opencode-go/*-contributor) echo "run.sh: ${MODEL#opencode-go/} trains on prompts and completions (Go contributor terms); never send it a brief" >&2; exit 2 ;;
   deepseek/*) echo "run.sh: direct deepseek/* spends paid credits; use opencode-go/* unless the user asked" >&2; exit 2 ;;
   opencode-go/*)
     # A $15-limit Go model burns the shared allowance four times faster than a
