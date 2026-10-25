@@ -1,5 +1,8 @@
 # pi-delegate baseline scores, aggregated from the maintainer's local benchmark
-# (2026-10-21; bench.sh --export-baseline). No repos, issues or code.
+# (2026-10-25; bench.sh --export-baseline). No repos, issues or code.
 # Only cells with 7+ runs are published. score: 0-1, see bench.sh. allowance: median share of the OpenCode Go month (- for Plus).
 # kind	size	risk	model	runs	score	allowance	minutes
-implement	L	high	openai/gpt-6.1-sol	7	0.87	-	10
+implement	L	high	openai/gpt-6.1-sol	11	0.84	-	11
+implement	M	medium	openai/gpt-6.1-sol	10	0.85	-	7
+review	-	-	openai/gpt-6-astra	20	0.89	-	3
+review	-	-	opencode-go/deepseek-v4.1-flash	8	0.89	0.0011	11
