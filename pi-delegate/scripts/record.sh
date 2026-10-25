@@ -15,6 +15,9 @@
 #   risk=low|medium|high  touched_safety=true|false  attempt=<n>
 #   outcome=merged|fixed-small|rerun|rejected  findings_real=<n>  findings_total=<n>
 #   cause=model|provider|brief|setup (why a run was rerun or rejected; only model scores)
+#   defects=<n>  defects_severe=<n> (real problems found in the delivered diff, by anyone)
+#   findings_severe=<n>  findings_missed=<n>  missed_severe=<n> (reviews; missed = real bugs
+#   in that diff the reviewer didn't report)  group=<label> (runs on the same diff and brief)
 #   safety_relaxed=true|false  backfilled=<comma-separated keys>
 # Values that parse as JSON (numbers, true/false) are stored as such; the rest as strings.
 set -euo pipefail
@@ -91,5 +94,5 @@ case "${1:-}" in
     tail -n "${2:-10}" "$RUNS" | jq -c .
     ;;
   *)
-    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+    sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

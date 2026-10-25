@@ -242,9 +242,13 @@ benchmark rather than a cost log:
 
 ```sh
 scripts/record.sh set <id> role=implement brief=single issue=421 task=feature size=L risk=high \
-  files=9 lines=640 touched_safety=true attempt=1 outcome=fixed-small safety_relaxed=false
-scripts/record.sh set <id> role=review issue=421 task=review findings_real=4 findings_total=6
+  files=9 lines=640 touched_safety=true attempt=1 outcome=fixed-small safety_relaxed=false \
+  defects=5 defects_severe=1 group=421
+scripts/record.sh set <id> role=review issue=421 task=review findings_real=4 findings_total=6 \
+  findings_severe=1 findings_missed=1 missed_severe=0 group=421
 ```
+
+`<id>` may be the run's start epoch alone when no other run started then.
 
 - `outcome`: `merged` (as delivered), `fixed-small` (you fixed small things), `rerun` (needed
   another attempt), `rejected`.
@@ -260,7 +264,16 @@ scripts/record.sh set <id> role=review issue=421 task=review findings_real=4 fin
   `high` changes a guard, fail-closed path, protected path, auth or hardware control itself.
 - `safety_relaxed=true` whenever the delegate loosened, bypassed or dropped an existing guard or
   protection, even if you caught it. It is the most important field.
-- Reviews: `findings_real` is what survived your verification, out of `findings_total` reported.
+- Reviews: `findings_real` is what survived your verification, out of `findings_total` reported;
+  `findings_severe` is how many of those would have broken a safety property or Never-change item.
+  `findings_missed` (and `missed_severe`) counts real bugs in the same diff that this reviewer
+  didn't report, whoever found them: you, another reviewer, or a later batch review. Set it to 0
+  when it missed nothing; leave it unset only when you can't tell.
+- `defects` on an implementation run: real problems in its delivered diff found by anyone (your
+  review, every reviewer, later reviews), each counted once; `defects_severe` those that would have
+  broken a safety property. Add later finds to the run with `record.sh set` when they turn up.
+- `group`: the same label on every run over the same diff and brief (bake-off contestants, parallel
+  reviewers), so `bench.sh --groups` shows them side by side.
 - Trials: `role=trial-implement` / `trial-review`, so the report can compare them with the roster.
 - A field you can't establish stays unset; never guess.
 
@@ -274,11 +287,20 @@ invisible to `--window`: leave headroom.
 
 ### Scores
 
-Each recorded run gets a score from 0 to 1. An implementation scores by outcome (merged 1,
-fixed-small 0.7, rerun 0.3, rejected 0), and scores 0 whenever `safety_relaxed=true`. A review
-scores real findings ÷ findings reported. `scripts/bench.sh --matrix` is the decision matrix: for
-each size (S/M/L) × risk (low/medium/high) cell it lists the best-scoring models with their run
-count and median Go allowance. Pick from the cell for the task in hand, preferring the cheaper model
+Each recorded run gets a score from 0 to 1:
+
+- An implementation scores by outcome (merged 1, fixed-small 0.7, rerun 0.3, rejected 0), less
+  0.05 per defect and 0.25 per severe defect, floored at 0. It scores 0 whenever
+  `safety_relaxed=true`.
+- A review scores 0.4 × precision (real ÷ reported) + 0.6 × recall, where recall counts a severe
+  finding twice: (real + severe) ÷ (real + severe + missed + missed severe). Finding more matters
+  more than reporting less. Without `findings_missed` a review scores on precision alone, so set it.
+- Runs whose cause isn't the model, or that ended on a provider error, are unscored.
+
+`scripts/bench.sh --matrix` is the decision matrix: for each size (S/M/L) × risk (low/medium/high)
+cell it lists the best-scoring models with their raw mean, run count and median Go allowance. It
+ranks by a shrunk score, as if each model also had 2 runs at 0.7, so one lucky run can't outrank a
+steady record and one bad run doesn't bury a model; read the raw mean beside it. Pick from the cell for the task in hand, preferring the cheaper model
 when scores are close. The roster stays the default where the matrix has no data.
 
 `--matrix` blends local runs with the public baseline, so a new install isn't starting from

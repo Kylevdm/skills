@@ -5,15 +5,23 @@
 #   bench.sh --matrix [--no-baseline]                             score per size x risk, best models first
 #   bench.sh --window                                             Go allowance used, last 5 h and 7 days
 #   bench.sh --export-baseline                                    rewrite assets/baseline.tsv from local runs
+#   bench.sh --groups                                             runs on the same diff and brief, side by side
 #
-# Scores (0-1): implementation runs score by outcome (merged 1, fixed-small 0.7,
-# rerun 0.3, rejected 0) and score 0 whenever safety_relaxed=true; reviews score
-# real findings / findings reported. A run is unscored when it ended on a provider
-# error or its cause is not the model (cause=provider|brief|setup): a usage limit,
-# a gap in the brief or a setup mistake says nothing about the model's work. --matrix blends local runs with the public
-# baseline in assets/baseline.tsv: a baseline cell weighs as up to 3 runs, one
-# less for each local run in that cell, so a new install starts from the
-# maintainer's numbers and its own runs take over.
+# Scores (0-1):
+# - Implementation runs score by outcome (merged 1, fixed-small 0.7, rerun 0.3,
+#   rejected 0), less 0.05 per defect and 0.25 per severe defect found in the
+#   delivered diff by anyone, floored at 0; 0 whenever safety_relaxed=true.
+# - Reviews score 0.4 x precision (real / reported) + 0.6 x recall, where recall
+#   counts a severe finding twice: (real + severe) / (real + severe + missed +
+#   missed_severe). Without findings_missed a review scores on precision alone.
+# - A run is unscored when it ended on a provider error or its cause is not the
+#   model (cause=provider|brief|setup): a usage limit, a gap in the brief or a
+#   setup mistake says nothing about the model's work.
+# --matrix ranks by a shrunk mean: each cell also holds PRIOR_RUNS phantom runs at
+# PRIOR_SCORE, so one lucky run can't outrank a steady record. It also blends in
+# the public baseline in assets/baseline.tsv: a baseline cell weighs as up to 3
+# runs, one less for each local run in that cell, so a new install starts from
+# the maintainer's numbers and its own runs take over.
 # Counts only runs recorded through run.sh / record.sh; Go spend from interactive
 # pi sessions or other tools is invisible here, so leave headroom.
 set -euo pipefail
@@ -34,6 +42,7 @@ for r in runs:
 
 OUTCOME_SCORE = {"merged": 1.0, "fixed-small": 0.7, "rerun": 0.3, "rejected": 0.0}
 BASELINE_WEIGHT = 3
+PRIOR_RUNS, PRIOR_SCORE = 2, 0.7
 MIN_PUBLIC_RUNS = 7
 SIZES, RISKS = ("S", "M", "L"), ("low", "medium", "high")
 NOT_MODEL = {"provider", "brief", "setup"}
@@ -49,10 +58,23 @@ def score(r):
         return None
     if kind(r) == "review":
         real, total = r.get("findings_real"), r.get("findings_total")
-        return real / total if real is not None and total else None
+        if real is None or total is None:
+            return None
+        missed = r.get("findings_missed")
+        if missed is None:
+            return real / total if total else None
+        found = real + r.get("findings_severe", 0)
+        lost = missed + r.get("missed_severe", 0)
+        recall = found / (found + lost) if found + lost else 1.0
+        return 0.4 * (real / total if total else 1.0) + 0.6 * recall
     if r.get("safety_relaxed") is True:
         return 0.0
-    return OUTCOME_SCORE.get(r.get("outcome"))
+    base = OUTCOME_SCORE.get(r.get("outcome"))
+    if base is None:
+        return None
+    severe = r.get("defects_severe", 0)
+    minor = max(0, r.get("defects", 0) - severe)
+    return max(0.0, base - 0.05 * minor - 0.25 * severe)
 
 def med(values):
     values = [v for v in values if v is not None]
@@ -102,15 +124,17 @@ if args[:1] == ["--matrix"]:
         rs = local.get(key, [])
         n, sc, allow = base.get(key, (0, 0.0, None))
         w = max(0, min(n, BASELINE_WEIGHT) - len(rs))
-        blended = (w * sc + sum(score(r) for r in rs)) / (w + len(rs))
+        blended = ((w * sc + sum(score(r) for r in rs) + PRIOR_RUNS * PRIOR_SCORE)
+                   / (w + len(rs) + PRIOR_RUNS))
         allow = med([r["allowance"] for r in rs]) if rs else allow
         cost = "Plus" if key[3].startswith("openai/") else fmt(allow, ".1f", 100, "%")
-        return blended, f"{key[3]} {blended:.2f} (n {len(rs)}{f' +{w} base' if w else ''}, {cost})"
+        raw = f"raw {mean_score(rs):.2f}, " if rs else ""
+        return blended, f"{key[3]} {blended:.2f} ({raw}n {len(rs)}{f' +{w} base' if w else ''}, {cost})"
     for k, rows in (("implement", [(s, r) for s in SIZES for r in RISKS]), ("review", None)):
         keys = set(local) | set(base)
         if rows is None:
             rows = sorted({(key[1], key[2]) for key in keys if key[0] == k})
-        print(f"{k} score by size/risk, best first (n local runs +baseline weight, median Go allowance)")
+        print(f"{k} score by size/risk, best first (shrunk score; raw mean, n local runs +baseline weight, median Go allowance)")
         for size, risk in rows:
             found = sorted((entry(key) for key in keys if key[:3] == (k, size, risk)), reverse=True)
             print(f"  {size}/{risk:7} " + ("   ".join(text for _, text in found[:3]) or "no data"))
@@ -118,6 +142,26 @@ if args[:1] == ["--matrix"]:
     unrisked = sum(1 for r in runs if kind(r) == "implement" and score(r) is not None and "risk" not in r)
     if unrisked:
         print(f"{unrisked} scored implement run(s) have no risk and sit outside the matrix: record.sh set <id> risk=...")
+    sys.exit(0)
+
+if args[:1] == ["--groups"]:
+    groups = defaultdict(list)
+    for r in runs:
+        if r.get("group"):
+            groups[r["group"]].append(r)
+    for g, rs in sorted(groups.items(), key=lambda kv: kv[1][0]["_start"]):
+        print(f'{g}  ({rs[0]["_start"]:%Y-%m-%d})')
+        for r in sorted(rs, key=lambda r: -(score(r) or 0)):
+            if kind(r) == "review":
+                detail = (f'real {r.get("findings_real", "-")}/{r.get("findings_total", "-")}'
+                          f'  severe {r.get("findings_severe", "-")}'
+                          f'  missed {r.get("findings_missed", "-")}/{r.get("missed_severe", "-")}')
+            else:
+                detail = (f'{r.get("outcome", "-")}  defects {r.get("defects", "-")}'
+                          f'/{r.get("defects_severe", "-")} severe')
+            print(f'  {r["provider"]}/{r["model"]:28} {kind(r):9} {fmt(score(r), ".2f"):5} {detail}')
+    if not groups:
+        print("no grouped runs yet: record.sh set <id> group=<label> on runs over the same diff and brief")
     sys.exit(0)
 
 if args[:1] == ["--window"]:
