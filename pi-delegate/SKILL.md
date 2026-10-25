@@ -99,11 +99,9 @@ Rules of thumb from past runs (ha-spark, October 2026):
   $0.56, #438), and a tenth of the allowance.
 - A glm-5.2 review of gpt-6.1-sol's work has found real bugs more than once (#421: four). Keep it as
   an extra reviewer on large tickets while the Go window allows.
-- gpt-6-astra was the strongest reviewer of the #409 batch C: three real findings out of three,
-  including a mid-tick config save slipping past the stale-settings check.
-- On a whole-batch safety review of gpt-6.1-sol's work (#409 batch C), trial reviewer
-  gpt-6-astra found 3 real issues in 2.5 minutes on Plus, two of which glm-5.2 missed on the same
-  brief. One trial so far: run it beside the roster reviewer until it has 5+ records.
+- gpt-6-astra first showed as a reviewer on #409 batch C: 3 real findings out of 3 in 2.5 minutes on
+  Plus, two of which glm-5.2 missed on the same brief, including a mid-tick config save slipping
+  past the stale-settings check. By 2026-10-25 it had 15 reviews and 86 real findings out of 93.
 - Plus was not the constraint: four gpt-6.1-sol runs plus one gpt-6-astra review used 38% of the
   Plus 5-hour window. Spend Plus before Go, which is the summed, scarce allowance.
 - Your own notes are part of the safety surface. A design instruction in a brief ("re-enter

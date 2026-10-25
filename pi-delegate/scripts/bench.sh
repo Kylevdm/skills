@@ -168,7 +168,7 @@ widths = [max(len(row[i]) for row in rows) for i in range(len(header))]
 for row in rows:
     print("  ".join(cell.ljust(w) for cell, w in zip(row, widths)).rstrip())
 
-unlabelled = sum(1 for r in runs if "outcome" not in r and r.get("role", "implement") != "review")
+unlabelled = sum(1 for r in runs if "outcome" not in r and kind(r) != "review")
 if unlabelled:
     print(f"\n{unlabelled} run(s) have no outcome yet: record.sh set <id> outcome=...")
 uncaused = sum(1 for r in runs if r.get("outcome") in ("rerun", "rejected") and "cause" not in r and not r.get("error"))
