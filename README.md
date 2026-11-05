@@ -4,6 +4,13 @@ Agent skills, one directory each. Everything a skill owns lives inside its own
 directory — glossary, decision records, templates — so a skill can be copied out
 whole.
 
+## check
+
+User-invoked pre-clear audit: before clearing a session, sweep memory,
+unpublished files, tracker drift, branch hygiene, running jobs and unkept
+promises; report the loose ends and fix the ones you approve. See
+[check/SKILL.md](check/SKILL.md).
+
 ## fog
 
 Capture, route and maintain unresolved future work across sessions and Wayfinder
