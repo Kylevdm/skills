@@ -313,6 +313,10 @@ it has 7+ runs, so one-off results never become someone else's starting point.
 
 ## Safety: don't weaken
 
+- The jail ships in [jail/](jail/): `pi-jail`, the two pi guard extensions and the protect lists.
+  `jail/install.sh` copies them into place on a new machine (it needs `bwrap` and pi in
+  `~/.pi/agent/bin`). Change them here and reinstall, so every machine runs the same guards. If
+  `pi-jail` is missing, install it before delegating; never fall back to bare `pi`.
 - pi has no sandbox and no approval prompts. Delegation always goes through `pi-jail`, never bare
   `pi` with tools in a real repo.
 - pi-jail (bubblewrap) needs a linked worktree. It hides `~/.ssh`, `~/.config/gh`, `~/.claude`,

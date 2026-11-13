@@ -29,6 +29,9 @@ scores models by task size and risk, starting from the published baseline in
 `scripts/summarize.sh` reports a run's cost and final message, and
 [references/batch.md](pi-delegate/references/batch.md) covers delegating a
 whole spec's tickets onto one integration branch.
+The jail itself (`pi-jail`, pi's guard extensions and per-repo protect lists)
+lives in [pi-delegate/jail/](pi-delegate/jail/); run `pi-delegate/jail/install.sh`
+once per machine. It copies rather than links, because the jail hides `$HOME`.
 
 ## Installing
 
