@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# pi-jail: run pi inside a bubblewrap jail scoped to one linked git worktree.
+#
+#   pi-jail <worktree> [pi args...]      e.g. pi-jail ~/ha-spark-wt/fix-123 -p "..." </dev/null
+#
+# Works for any repo. Inside the jail:
+#   - $HOME is empty except pi itself (~/.pi/agent) and toolchains (~/.nvm, ~/.bun,
+#     the repo's .venv), all read-only. No ~/.ssh, ~/.config/gh, ~/.claude, ~/.codex.
+#   - Only the worktree is writable; the repo's git dir is read-only (no commits).
+#   - .env* files (except *.example) are unreadable; paths listed in
+#     ~/.config/pi-jail/protect/<repo-name> (one per line, relative to the repo
+#     root) are read-only. The protected-paths pi extension reads the same list.
+#   - Environment is cleared; no SSH agent, tokens or keyring.
+#   - pi's own extensions/settings are read-only so a run can't disable its guards.
+# Network stays on: pi needs its model providers.
+set -euo pipefail
+
+[ $# -ge 1 ] || { echo "usage: pi-jail <worktree> [pi args...]" >&2; exit 2; }
+WT=$(realpath -e "$1"); shift
+[ -f "$WT/.git" ] || { echo "pi-jail: $WT is not a linked git worktree (git worktree add)" >&2; exit 2; }
+GIT_COMMON=$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir)
+REPO=$(dirname "$GIT_COMMON")
+[ "$WT" != "$REPO" ] || { echo "pi-jail: refusing to jail the main checkout" >&2; exit 2; }
+case "$WT" in "$HOME"|/|"$HOME"/.*) echo "pi-jail: unsafe worktree path $WT" >&2; exit 2 ;; esac
+
+NODE_BIN=$(dirname "$(readlink -f "$(command -v node)")")
+AGENT=$HOME/.pi/agent
+PROTECT=$HOME/.config/pi-jail/protect/$(basename "$REPO")
+
+mkdir -p "$HOME/.cache/pi-jail"
+GITCONFIG=$HOME/.cache/pi-jail/gitconfig
+printf '[user]\n\tname = %s\n\temail = %s\n[safe]\n\tdirectory = *\n' \
+  "$(git config --global user.name)" "$(git config --global user.email)" > "$GITCONFIG"
+
+args=(
+  --die-with-parent --unshare-pid --unshare-ipc --unshare-uts --new-session
+  --ro-bind / /
+  --dev /dev --proc /proc
+  --tmpfs /tmp --tmpfs /var/tmp --tmpfs /run/user --tmpfs /home
+  --bind "$AGENT" "$AGENT"
+  --ro-bind "$AGENT/bin" "$AGENT/bin"
+  --ro-bind "$AGENT/install" "$AGENT/install"
+  --ro-bind "$AGENT/settings.json" "$AGENT/settings.json"
+  --ro-bind "$AGENT/extensions" "$AGENT/extensions"
+  --ro-bind "$GIT_COMMON" "$GIT_COMMON"
+  --bind "$WT" "$WT"
+  --ro-bind "$GITCONFIG" /tmp/gitconfig
+)
+PATH_IN="$NODE_BIN"
+for d in "$HOME/.nvm" "$HOME/.bun" "$HOME/.config/pi-jail"; do
+  [ -d "$d" ] && args+=(--ro-bind "$d" "$d")
+done
+[ -d "$HOME/.bun/bin" ] && PATH_IN="$PATH_IN:$HOME/.bun/bin"
+if [ -d "$REPO/.venv" ]; then
+  args+=(--ro-bind "$REPO/.venv" "$REPO/.venv")
+  PATH_IN="$PATH_IN:$REPO/.venv/bin"
+fi
+[ -e "$AGENT/trust.json" ] && args+=(--ro-bind "$AGENT/trust.json" "$AGENT/trust.json")
+
+# Read-only overlays inside the worktree.
+args+=(--ro-bind "$WT/.git" "$WT/.git")
+if [ -f "$PROTECT" ]; then
+  while IFS= read -r p; do
+    p=${p%%#*}; p=${p%/}; p=$(echo "$p" | xargs)
+    [ -n "$p" ] && [ -e "$WT/$p" ] && args+=(--ro-bind "$WT/$p" "$WT/$p")
+  done < "$PROTECT"
+fi
+while IFS= read -r -d '' f; do
+  case "$f" in *.example) ;; *) args+=(--ro-bind /dev/null "$f") ;; esac
+done < <(find "$WT" -name node_modules -prune -o -name '.env*' -type f -print0)
+
+args+=(
+  --clearenv
+  --setenv HOME "$HOME" --setenv USER "$USER"
+  --setenv PATH "$PATH_IN:/usr/local/bin:/usr/bin:/bin"
+  --setenv LANG "${LANG:-C.UTF-8}" --setenv TERM "${TERM:-xterm-256color}"
+  --setenv GIT_CONFIG_GLOBAL /tmp/gitconfig --setenv GIT_CONFIG_NOSYSTEM 1
+  --setenv PYTHONPATH "$WT"
+  --chdir "$WT"
+)
+
+exec bwrap "${args[@]}" "$AGENT/bin/pi" "$@"

@@ -1,0 +1,5 @@
+# ha-spark: paths delegated models must not change (Opus handles these directly).
+ha_spark/devices/inverters/
+ha_spark/energy/supply_guard.py
+ha_spark/energy/soc_monitor.py
+ha_spark_addon/CHANGELOG.md
