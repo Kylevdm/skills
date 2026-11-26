@@ -29,28 +29,32 @@ conversation's context, or when it is security-critical.
 
 | Work | Model |
 |---|---|
-| General fixes (default) | `opencode-go/glm-5.2` |
-| Larger multi-file or design-heavy work; second-opinion reviews | `openai/gpt-6.1-sol` (ChatGPT Plus quota) |
+| General fixes (default) | `opencode-go/glm-5.3` (on a $200 promotion; see the avoid list) |
+| Larger multi-file or design-heavy work; second-opinion reviews | `openai/gpt-6.2-sol` (ChatGPT Plus quota) |
 | Mechanical edits, writing tests, lint/type fix-ups | `opencode-go/kimi-k2.7-code` |
 | Cheap, fast, large-context sweeps; extra reviewer when allowance is tight | `opencode-go/deepseek-v4.1-flash` |
 | Throwaway prototypes | `opencode-go/longcat-2.5-preview-free` while pi still serves it; then `opencode-go/beam-free` |
 
 - Reviews: the primary safety reviewer is a Plus model that didn't write the code, so nothing grades
-  itself: `openai/gpt-6-astra` reviews gpt-6.1-sol's work, and gpt-6.1-sol reviews astra's or a Go
-  model's. glm-5.2 and deepseek-v4.1-flash are extra reviewers, or cheap spec reviewers.
-- Follow-up fixes from review go to gpt-6.1-sol or astra in a brief, unless writing the brief costs
+  itself: `openai/gpt-6-astra` reviews gpt-6.2-sol's work, and gpt-6.2-sol reviews astra's or a Go
+  model's. glm-5.3 and deepseek-v4.1-flash are extra reviewers, or cheap spec reviewers.
+- Follow-up fixes from review go to gpt-6.2-sol or astra in a brief, unless writing the brief costs
   about as much as the fix or the code is protect-listed.
-- **Never** `openai/gpt-6-sol`. **Never** direct `deepseek/*` (paid credits; OpenCode Go serves the
+- **Never** `openai/gpt-6-sol`, and no longer `openai/gpt-6.1-sol` (replaced by gpt-6.2-sol on
+  2026-11-26). **Never** `opencode-go/glm-5.2`: retired, it returns 410 (since 2026-11-24). **Never** direct `deepseek/*` (paid credits; OpenCode Go serves the
   same models).
   **Never** a `*-contributor` Go model (Muse Spark and similar): its terms let the vendor train on
   every prompt and completion, so the brief and the code would leave your control.
 - **Avoid unless asked:** any Go model with a $15 monthly limit (see
-  [assets/go-limits.tsv](assets/go-limits.tsv)): Kimi K3, Grok 4.7, Qwen3.8 Max, GLM-5.3, DeepSeek V4
-  Pro, MiMo Pro, Claude Haiku. They use the allowance four times faster than a $60 model. The luna
+  [assets/go-limits.tsv](assets/go-limits.tsv)): Kimi K3, Grok 4.7, Qwen3.8 Max, DeepSeek V4
+  Pro, MiMo Pro, Claude Haiku. They use the allowance four times faster than a $60 model.
+  GLM-5.3 is normally $15 too, but has a **$200 promotional limit** (from the user, 2026-11-26; end
+  date not known), so use it heavily while that lasts. When the promotion ends, set it back to 15
+  in go-limits.tsv and move the general-fix default to `opencode-go/glm-5.3-flash` ($60). The luna
   models are also on ChatGPT Plus, so use them only as `openai/gpt-6-luna` / `openai/gpt-5.6-luna`.
   `scripts/run.sh` refuses all of these; `PI_DELEGATE_ALLOW_LOW_LIMIT=1` overrides when the user asked.
-- ChatGPT Plus accepts gpt-6.1-sol, gpt-6-astra, gpt-6-luna, gpt-5.6-sol, gpt-5.6-terra and
-  gpt-5.6-luna (checked 2026-10-20); gpt-5.5, gpt-5.3-codex and gpt-5.4-mini return 400. Plus is
+- ChatGPT Plus accepts gpt-6.2-sol (from 2026-11-26), gpt-6.1-sol, gpt-6-astra, gpt-6-luna,
+  gpt-5.6-sol, gpt-5.6-terra and gpt-5.6-luna (checked 2026-10-20); gpt-5.5, gpt-5.3-codex and gpt-5.4-mini return 400. Plus is
   flat-rate and the Go allowance is the scarce one, so prefer Plus wherever it suits the task. Its
   per-model caps aren't published: back off only on a Plus rate-limit error or when the user says
   the window is nearly full, not on usage figures alone.
@@ -63,7 +67,9 @@ OpenCode Go is **one summed allowance**: each run uses spend ÷ that model's mon
 fractions of all models add up against the 5-hour (20%), weekly (50%) and monthly (100%) windows.
 $11 of glm-5.2 is 11/60 = 18% of the month, and nearly a whole 5-hour window: that is exactly where
 the 2026-10-18 batch hit `429 GoUsageLimitError`. So choose by spend ÷ limit, not token price:
-deepseek-v4.1-flash ($80 limit, cheap tokens) is the most allowance-efficient Go model.
+deepseek-v4.1-flash ($100 limit, cheap tokens) is the most allowance-efficient Go model per run, and
+glm-5.3 on its $200 promotion is the strongest one the allowance comfortably affords (bms-flux V1's
+one glm-5.3 run cost $7.55: 50% of the month at $15, 3.8% at $200).
 
 Before launching Go runs, check the window: `scripts/bench.sh --window` sums the allowance used in
 the last 5 hours. Add an estimate for each run you're about to launch (the median for that model
@@ -89,8 +95,9 @@ trial:
 
 Current trial group (from 2026-10-20, revised 2026-10-25): `openai/gpt-6-astra` for implementation
 (large and design-heavy, against gpt-6.1-sol; its reviews joined the roster on 2026-10-21 at the
-user's say-so), and on Go `glm-5.3-flash` for implementation (shadowing glm-5.2; 63% on the DeepSWE
-leaderboard against glm-5.2's 44%, at a fraction of the cost) and `mimo-v2.6-flash` (general,
+user's say-so), and on Go `glm-5.3-flash` for implementation (shadowing glm-5.3 now that glm-5.2 is
+retired; 63% on the DeepSWE leaderboard against glm-5.2's 44%, at a fraction of the cost; it is the
+fallback default when glm-5.3's promotion ends) and `mimo-v2.6-flash` (general,
 fix-ups and mechanical; watch its wall time). Dropped 2026-10-25 at the user's say-so:
 `qwen3.7-plus` (weak implementation), `minimax-m3` and `glm-5.3-flash` as reviewers (below
 deepseek-v4.1-flash for more allowance), `step-5-preview` (its $60 promotion ended; now $15),
@@ -103,11 +110,11 @@ trained to generate text; a narrow classifier trial is parked in the skills repo
 
 Rules of thumb from past runs (ha-spark, October 2026):
 - glm-5.2 on a large ticket can cost about $4, 7% of the month (#420, #422). For large tickets, use
-  gpt-6.1-sol on the flat-rate Plus quota and gpt-6-astra for its review.
+  gpt-6.2-sol on the flat-rate Plus quota and gpt-6-astra for its review.
 - For reviews, deepseek-v4.1-flash cost about a sixth of glm-5.2 on the same brief ($0.09 against
   $0.56, #438), and a tenth of the allowance.
-- A glm-5.2 review of gpt-6.1-sol's work has found real bugs more than once (#421: four). Keep it as
-  an extra reviewer on large tickets while the Go window allows.
+- A glm-5.2 review of gpt-6.1-sol's work has found real bugs more than once (#421: four). glm-5.2 is
+  retired; glm-5.3 takes that extra-reviewer slot on large tickets while the Go window allows.
 - gpt-6-astra first showed as a reviewer on #409 batch C: 3 real findings out of 3 in 2.5 minutes on
   Plus, two of which glm-5.2 missed on the same brief, including a mid-tick config save slipping
   past the stale-settings check. By 2026-10-25 it had 15 reviews and 86 real findings out of 93.
@@ -184,7 +191,7 @@ Re-summarise any log with `scripts/summarize.sh <log> [start-epoch]`.
 
 **A run that dies on a provider error still exits 0 from pi.** `run.sh` checks for this and exits 3.
 The summary's `ERROR:` line says why. On `429 GoUsageLimitError` the OpenCode Go window is spent:
-don't retry. Move the run to `openai/gpt-6.1-sol` (Plus quota) if it suits the task, or tell the user
+don't retry. Move the run to `openai/gpt-6.2-sol` (Plus quota) if it suits the task, or tell the user
 when the window resets and ask.
 
 For a **bake off**, create one worktree per model (`<name>-glm`, `<name>-sol`, …), give each the

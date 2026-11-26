@@ -1,11 +1,11 @@
 # OpenCode Go monthly limits (Go plan, not Go Plus), from https://opencode.ai/v2/docs/console/go/
-# Checked 2026-10-25. A run uses spend / limit of the allowance; fractions add up across models.
+# Checked 2026-10-25; glm-5.3, glm-5.3-flash and deepseek-v4.1-flash updated from the user 2026-11-26. A run uses spend / limit of the allowance; fractions add up across models.
 # Windows: 5 h = 20%, week = 50%, month = 100% of the summed allowance.
 # limit "free" = unlimited free model (counts 0). Refresh when a model isn't listed.
 # model	monthly_usd	note
 glm-5.3-flash	60
-glm-5.3	15
-glm-5.2	60
+glm-5.3	200	$200 promotion (from the user, 2026-11-26); normally 15
+glm-5.2	60	retired: returns 410 since 2026-11-24; kept so old logs still cost
 kimi-k3	15
 kimi-k2.7-code	60
 longcat-2.0	60
@@ -22,7 +22,7 @@ muse-spark-1.2-contributor	60
 qwen3.8-max	15
 qwen3.8-flash	30
 qwen3.7-plus	60
-deepseek-v4.1-flash	80
+deepseek-v4.1-flash	100	was 80 until November 2026
 deepseek-v4-pro	15
 hy4-preview	30
 hy3	60

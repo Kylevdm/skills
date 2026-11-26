@@ -51,7 +51,7 @@ evidence the jail can't fetch, and any line from `carry-forward.md` that applies
 notes carried most of each brief's ticket-specific value; the preamble alone is too general.
 
 Fit each wave to the Go window (SKILL.md, "The Go allowance"): `scripts/bench.sh --window` plus
-the estimate for the runs you're launching must stay under 15%. Large tickets go to gpt-6.1-sol on
+the estimate for the runs you're launching must stay under 15%. Large tickets go to gpt-6.2-sol on
 Plus by default; spread the rest across Go models so one model's spend doesn't dominate. Plus runs
 have no cap. A wave may carry one trial run (SKILL.md, "Trying new models") on a ticket that touches
 no Never-change item.
