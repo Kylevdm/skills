@@ -36,12 +36,12 @@ conversation's context, or when it is security-critical.
 | Throwaway prototypes | `opencode-go/longcat-2.5-preview-free` while pi still serves it; then `opencode-go/beam-free` |
 
 - Reviews: the primary safety reviewer is a Plus model that didn't write the code, so nothing grades
-  itself: `openai/gpt-6-astra` reviews gpt-6.2-sol's work, and gpt-6.2-sol reviews astra's or a Go
+  itself: `openai/gpt-6.2-astra` reviews gpt-6.2-sol's work, and gpt-6.2-sol reviews astra's or a Go
   model's. glm-5.3 and deepseek-v4.1-flash are extra reviewers, or cheap spec reviewers.
 - Follow-up fixes from review go to gpt-6.2-sol or astra in a brief, unless writing the brief costs
   about as much as the fix or the code is protect-listed.
-- **Never** `openai/gpt-6-sol`, and no longer `openai/gpt-6.1-sol` (replaced by gpt-6.2-sol on
-  2026-11-26). **Never** `opencode-go/glm-5.2`: retired, it returns 410 (since 2026-11-24). **Never** direct `deepseek/*` (paid credits; OpenCode Go serves the
+- **Never** `openai/gpt-6-sol`, and no longer `openai/gpt-6.1-sol` or `openai/gpt-6-astra` (replaced
+  by gpt-6.2-sol and gpt-6.2-astra on 2026-11-26). **Never** `opencode-go/glm-5.2`: retired, it returns 410 (since 2026-11-24). **Never** direct `deepseek/*` (paid credits; OpenCode Go serves the
   same models).
   **Never** a `*-contributor` Go model (Muse Spark and similar): its terms let the vendor train on
   every prompt and completion, so the brief and the code would leave your control.
@@ -51,10 +51,10 @@ conversation's context, or when it is security-critical.
   GLM-5.3 is normally $15 too, but has a **$200 promotional limit** (from the user, 2026-11-26; end
   date not known), so use it heavily while that lasts. When the promotion ends, set it back to 15
   in go-limits.tsv and move the general-fix default to `opencode-go/glm-5.3-flash` ($60). The luna
-  models are also on ChatGPT Plus, so use them only as `openai/gpt-6-luna` / `openai/gpt-5.6-luna`.
+  model is also on ChatGPT Plus, so use it only as `openai/gpt-6-luna`.
   `scripts/run.sh` refuses all of these; `PI_DELEGATE_ALLOW_LOW_LIMIT=1` overrides when the user asked.
-- ChatGPT Plus accepts gpt-6.2-sol (from 2026-11-26), gpt-6.1-sol, gpt-6-astra, gpt-6-luna,
-  gpt-5.6-sol, gpt-5.6-terra and gpt-5.6-luna (checked 2026-10-20); gpt-5.5, gpt-5.3-codex and gpt-5.4-mini return 400. Plus is
+- ChatGPT Plus offers gpt-6.2-sol, gpt-6.2-astra and gpt-6-luna (from the user, 2026-11-26). Older
+  Plus models (gpt-6.1-sol, gpt-6-astra, gpt-5.6-*) are off the roster. Plus is
   flat-rate and the Go allowance is the scarce one, so prefer Plus wherever it suits the task. Its
   per-model caps aren't published: back off only on a Plus rate-limit error or when the user says
   the window is nearly full, not on usage figures alone.
@@ -93,9 +93,9 @@ trial:
 - After 5+ benchmark records for a task type, show the user the numbers and let them decide whether
   it joins the roster for that task type. Edit the roster table only on their say-so.
 
-Current trial group (from 2026-10-20, revised 2026-10-25): `openai/gpt-6-astra` for implementation
-(large and design-heavy, against gpt-6.1-sol; its reviews joined the roster on 2026-10-21 at the
-user's say-so), and on Go `glm-5.3-flash` for implementation (shadowing glm-5.3 now that glm-5.2 is
+Current trial group (from 2026-10-20, revised 2026-11-26): `openai/gpt-6.2-astra` for implementation
+(large and design-heavy, against gpt-6.2-sol; astra's reviews joined the roster on 2026-10-21 at the
+user's say-so, as gpt-6-astra), and on Go `glm-5.3-flash` for implementation (shadowing glm-5.3 now that glm-5.2 is
 retired; 63% on the DeepSWE leaderboard against glm-5.2's 44%, at a fraction of the cost; it is the
 fallback default when glm-5.3's promotion ends) and `mimo-v2.6-flash` (general,
 fix-ups and mechanical; watch its wall time). Dropped 2026-10-25 at the user's say-so:
@@ -110,7 +110,7 @@ trained to generate text; a narrow classifier trial is parked in the skills repo
 
 Rules of thumb from past runs (ha-spark, October 2026):
 - glm-5.2 on a large ticket can cost about $4, 7% of the month (#420, #422). For large tickets, use
-  gpt-6.2-sol on the flat-rate Plus quota and gpt-6-astra for its review.
+  gpt-6.2-sol on the flat-rate Plus quota and gpt-6.2-astra for its review.
 - For reviews, deepseek-v4.1-flash cost about a sixth of glm-5.2 on the same brief ($0.09 against
   $0.56, #438), and a tenth of the allowance.
 - A glm-5.2 review of gpt-6.1-sol's work has found real bugs more than once (#421: four). glm-5.2 is
